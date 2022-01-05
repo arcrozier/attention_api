@@ -9,13 +9,18 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from v2.models import Users
+from v2.models import User
+from v2.models import Challenge
 
 
 @api_view(['GET'])
 def get_challenge(request: Request, public_key: str) -> Response:
     # TODO: Generate a new challenge
-    pass
+    try:
+        user = User.objects.get(public_key=public_key)
+        challenge = Challenge(id=user.public_key)
+    except User.DoesNotExist:
+        return Response(build_response(False, "An error occurred retrieving a challenge", 403, True))
 
 
 @api_view(['POST'])
