@@ -12,3 +12,4 @@ class User(models.Model):
 class Challenge(models.Model):
     challenge = models.BigAutoField(primary_key=True)
     id = models.ForeignKey(to=User, on_delete=CASCADE)
+    valid = models.BooleanField(default=True)
