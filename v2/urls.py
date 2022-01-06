@@ -1,4 +1,4 @@
-"""attention_api URL Configuration
+"""v2 URL Configuration
 
 The `urlpatterns` list routes URLs to views. For more information please see:
     https://docs.djangoproject.com/en/3.2/topics/http/urls/
@@ -13,8 +13,12 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
-from django.urls import path, include
+from django.urls import path
+
+from . import views
 
 urlpatterns = [
-    path('v2/', include('v2.urls'))
+    path('get_challenge/<str:public_key>/', views.get_challenge),
+    path('post_id/', views.upload_public_key),
+    path('send_alert/', views.send_alert),
 ]
