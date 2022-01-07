@@ -1,6 +1,8 @@
 from django.test import TestCase
 
 # Create your tests here.
+from v2.views import check_params
+from django.test import Client
 
 
 class APIV2TestSuite(TestCase):
@@ -8,7 +10,7 @@ class APIV2TestSuite(TestCase):
     def setUp(self):
         pass
 
-    def test_add_user(self):
+    def test_add_user_simple(self):
         """
         This should test upload_public_key
         Use both POST and PUT
@@ -16,6 +18,8 @@ class APIV2TestSuite(TestCase):
         Test malformed requests (missing required parameters, too many parameters, etc.)
         Check status codes
         """
+        c = Client()
+        response = c.get('/v2/')
         pass
 
     def test_get_challenge(self):
@@ -50,10 +54,79 @@ class APIV2TestSuite(TestCase):
         """
         pass
 
-    def test_check_params(self):
+    def test_check_params_simple(self):
         """
         Just pass a bunch and check that the missing params line up, that it returns False each time something isn't
         right, returns True whenever all params are present
         Should also return True when more params than necessary passed
         """
-        pass
+        empty_dict = {}
+        simple_dict = {
+            "param1": "val1",
+            "param2": "val2",
+            "param3": "val3"
+        }
+        big_dict = {
+            "to": "TO this person",
+            "from": "FROM this person",
+            "signature": "I've signed this",
+            "challenge": "This is what I signed",
+            "message": "This is what I want to say",
+            "id": "This is an ID",
+            "token": "This is a token"
+        }
+
+        list_empty = []
+        list_params = ['param1', 'param2', 'param3']
+        list_params_extra = ['param1', 'param2', 'param3', 'param4']
+        list_params_fewer = ['param2', 'param3']
+
+        list_values = ['signature', 'challenge', 'from', 'to', 'message', 'id', 'token']
+        list_some_values = ['signature', 'from', 'to', 'message', 'challenge']
+
+        # These should all succeed
+        good, response = check_params(list_empty, empty_dict)
+        self.assertTrue(good)
+        good, response = check_params(list_params, simple_dict)
+        self.assertTrue(good)
+        good, response = check_params(list_params_fewer, simple_dict)
+        self.assertTrue(good)
+        good, response = check_params(list_values, big_dict)
+        self.assertTrue(good)
+        good, response = check_params(list_some_values, big_dict)
+        self.assertTrue(good)
+
+        # These should all fail
+        good, response = check_params(list_params_extra, simple_dict)
+        self.assertFalse(good)
+        self.assertContains(response, 'param4', status_code=400)
+        good, response = check_params(list_params, empty_dict)
+        self.assertFalse(good)
+        self.assertContains(response, 'param1', status_code=400)
+        self.assertContains(response, 'param2', status_code=400)
+        self.assertContains(response, 'param3', status_code=400)
+
+    def test_check_params_weird(self):
+        weird_dict = {
+            "": "Empty key",
+            "key1": 1,
+            "key2": "Normal key-value",
+            "key3": None,
+            "key4": 3.14,
+            "key5": {
+                "key5_0": "",
+                "key5_1": "another one?"
+            },
+            "key6": "",
+            "key7": ["value1", "value2", 3, None, 3.14, ""]
+        }
+
+        list_keys = ['key1', '', 'key6', 'key7', 'key1', 'key2', 'key3', 'key4', 'key5']
+        list_keys_extra = ['key1', '', 'key6', 'key7', 'key1', 'key2', 'key3', 'key4', 'key5', 'key5_0']
+
+        good, response = check_params(list_keys, weird_dict)
+        self.assertTrue(good)
+        good, response = check_params(list_keys_extra, weird_dict)
+        self.assertFalse(good)
+        self.assertContains(response, 'key5_0', status_code=400)
+

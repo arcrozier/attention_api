@@ -1,9 +1,11 @@
 import json
 from base64 import b64decode
 from hashlib import sha256
-from typing import Any, Tuple
+from typing import Any, Tuple, Dict
 
 import firebase_admin
+from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives.asymmetric import ec
 from django.db import transaction
 from django.http import QueryDict
 from ecdsa import BadSignatureError
@@ -91,22 +93,22 @@ def send_alert(request: Request) -> Response:
     return Response(build_response(True, "Successfully sent message"), status=200)
 
 
-def verify_signature(challenge: str, signed: str, public_key: str) -> bool:
-    verifying_key = ecdsa.VerifyingKey.from_string(b64decode(public_key), curve=ecdsa.SECP256k1, hashfunc=sha256)
+def verify_signature(challenge: str, signature: str, public_key: str) -> bool:
+    loaded_key = serialization.load_pem_public_key(public_key.encode())
     try:
-        verifying_key.verify(b64decode(signed), challenge)
+        loaded_key.verify(signature.encode(), challenge.encode(), ec.ECDSA(hashes.SHA256()))
         return True
     except BadSignatureError:
         return False
 
 
-def check_params(expected: list, holder: QueryDict) -> Tuple[bool, Response]:
+def check_params(expected: list, holder: Dict) -> Tuple[bool, Response]:
     missing: list = []
     for expect in expected:
         if expect not in holder:
             missing.append(expect)
     response = Response(build_response(False, f"Missing required parameter(s): {', '.join(missing)}", string=True),
-                        status=400)
+                        status=400) if len(missing) != 0 else Response()
     return len(missing) == 0, response
 
 

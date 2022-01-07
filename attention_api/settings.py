@@ -9,10 +9,12 @@ https://docs.djangoproject.com/en/3.2/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/3.2/ref/settings/
 """
-
+import os
 from pathlib import Path
 
-import production
+os.environ.setdefault('ATTENTION_KEY', 'django-insecure-e9q-4fjk_(--+=joxtbs$2d1km39!7!4_u15851pxjc0pu5e(k')
+
+from . import production
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = production.BASE_DIR
@@ -22,7 +24,7 @@ BASE_DIR = production.BASE_DIR
 # See https://docs.djangoproject.com/en/3.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-e9q-4fjk_(--+=joxtbs$2d1km39!7!4_u15851pxjc0pu5e(k'
+SECRET_KEY = os.environ['ATTENTION_KEY']
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
