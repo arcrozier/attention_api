@@ -1,24 +1,19 @@
+import base64
 import json
-from base64 import b64decode
-from hashlib import sha256
 from typing import Any, Tuple, Dict
 
 import firebase_admin
+from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import ec
 from django.db import transaction
-from django.http import QueryDict
-from ecdsa import BadSignatureError
 from firebase_admin import messaging
-
 from rest_framework.decorators import api_view
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-import ecdsa
-
-from v2.models import User
 from v2.models import Challenge
+from v2.models import User
 
 
 @api_view(['GET'])
@@ -94,11 +89,11 @@ def send_alert(request: Request) -> Response:
 
 
 def verify_signature(challenge: str, signature: str, public_key: str) -> bool:
-    loaded_key = serialization.load_pem_public_key(public_key.encode())
+    loaded_key = serialization.load_pem_public_key(base64.b64decode(public_key))
     try:
-        loaded_key.verify(signature.encode(), challenge.encode(), ec.ECDSA(hashes.SHA256()))
+        loaded_key.verify(base64.b64decode(signature), challenge.encode(), ec.ECDSA(hashes.SHA256()))
         return True
-    except BadSignatureError:
+    except InvalidSignature:
         return False
 
 

@@ -1,14 +1,22 @@
 from django.test import TestCase
 
 # Create your tests here.
+from v2.models import User, Challenge
 from v2.views import check_params
 from django.test import Client
 
 
 class APIV2TestSuite(TestCase):
+    PUBLIC_KEY1 = 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEw8VT4Fdb2TQm6OVu8wsasA65XQwnzv2jaVMn8+iGhgLlckf0vAh/xB6CCDhyaw' \
+                  'E9TCDlC66QfgpHW5Ld1CAw5w=='
+    PUBLIC_KEY2 = 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEuv6zaydP6LRu+VDl8ihLTWrYe2F0AEIoTWAeIvOjIdi' \
+                  '8N1v+QxCYpyByP3NuA3YylwFrcQTfMQwqtzWUuo8dMg=='
 
     def setUp(self):
-        pass
+        User.objects.create(public_key='MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEw8VT4Fdb2TQm6OVu8wsasA65XQwnzv2jaVMn8+iGh'
+                                       'gLlckf0vAh/xB6CCDhyawE9TCDlC66QfgpHW5Ld1CAw5w==', fcm_id='Fake')
+        User.objects.create(public_key='MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEuv6zaydP6LRu+VDl8ihLTWrYe2F0AEIoTWAeIvOjIdi'
+                                       '8N1v+QxCYpyByP3NuA3YylwFrcQTfMQwqtzWUuo8dMg==', fmc_id='Fake')
 
     def test_add_user_simple(self):
         """
@@ -19,7 +27,10 @@ class APIV2TestSuite(TestCase):
         Check status codes
         """
         c = Client()
-        response = c.get('/v2/')
+        response = c.get('/v2/MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEw8VT4Fdb2TQm6OVu8wsasA65XQwnzv2jaVMn8+iGhgLlckf0vAh/x'
+                         'B6CCDhyawE9TCDlC66QfgpHW5Ld1CAw5w==')
+        self.assertContains(response, 'true', status_code=200)
+        challenge = Challenge.objects.get()
         pass
 
     def test_get_challenge(self):
@@ -129,4 +140,3 @@ class APIV2TestSuite(TestCase):
         good, response = check_params(list_keys_extra, weird_dict)
         self.assertFalse(good)
         self.assertContains(response, 'key5_0', status_code=400)
-
