@@ -1,3 +1,5 @@
+import json
+
 from django.test import TestCase
 
 # Create your tests here.
@@ -13,10 +15,8 @@ class APIV2TestSuite(TestCase):
                   '8N1v+QxCYpyByP3NuA3YylwFrcQTfMQwqtzWUuo8dMg=='
 
     def setUp(self):
-        User.objects.create(public_key='MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEw8VT4Fdb2TQm6OVu8wsasA65XQwnzv2jaVMn8+iGh'
-                                       'gLlckf0vAh/xB6CCDhyawE9TCDlC66QfgpHW5Ld1CAw5w==', fcm_id='Fake')
-        User.objects.create(public_key='MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEuv6zaydP6LRu+VDl8ihLTWrYe2F0AEIoTWAeIvOjIdi'
-                                       '8N1v+QxCYpyByP3NuA3YylwFrcQTfMQwqtzWUuo8dMg==', fmc_id='Fake')
+        User.objects.create(public_key=self.PUBLIC_KEY1, fcm_id='Fake')
+        User.objects.create(public_key=self.PUBLIC_KEY2, fmc_id='Fake')
 
     def test_add_user_simple(self):
         """
@@ -26,14 +26,9 @@ class APIV2TestSuite(TestCase):
         Test malformed requests (missing required parameters, too many parameters, etc.)
         Check status codes
         """
-        c = Client()
-        response = c.get('/v2/MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEw8VT4Fdb2TQm6OVu8wsasA65XQwnzv2jaVMn8+iGhgLlckf0vAh/x'
-                         'B6CCDhyawE9TCDlC66QfgpHW5Ld1CAw5w==')
-        self.assertContains(response, 'true', status_code=200)
-        challenge = Challenge.objects.get()
         pass
 
-    def test_get_challenge(self):
+    def test_get_challenge_simple(self):
         """
         This should test get_challenge
         Request a challenge, make sure the one in the database is the same as the one returned
@@ -41,7 +36,26 @@ class APIV2TestSuite(TestCase):
         Make sure no two challenges are the same
         Check status codes
         """
-        pass
+        c = Client()
+        response = c.get(f'/v2/{self.PUBLIC_KEY1}')
+        self.assertContains(response, 'true', status_code=200)
+        challenge = Challenge.objects.get(id__public_key=self.PUBLIC_KEY1)
+        self.assertContains(response, str(challenge.challenge))
+        response1 = c.get(f'/v2/{self.PUBLIC_KEY1}')
+        response1_decoded = json.loads(response1.body)
+        response_decoded = json.loads(response.body)
+        self.assertNotEqual(response_decoded['data'], response1_decoded['data'])
+        self.assertEqual(len(Challenge.objects.filter(id__public_key=self.PUBLIC_KEY1)), 2)
+
+        response = c.get(f'/v2/{self.PUBLIC_KEY2}')
+        self.assertContains(response, 'true', status_code=200)
+        challenge = Challenge.objects.get(id__public_key=self.PUBLIC_KEY2)
+        self.assertContains(response, str(challenge.challenge))
+        response_decoded = json.loads(response.body)
+        self.assertEqual(challenge.challenge, response_decoded['data'])
+        c.get(f'/v2/{self.PUBLIC_KEY2}')
+        self.assertEqual(len(Challenge.objects.filter(id__public_key=self.PUBLIC_KEY1)), 2)
+        self.assertEqual(len(Challenge.objects.filter(id__public_key=self.PUBLIC_KEY2)), 2)
 
     def test_send_alert(self):
         """
