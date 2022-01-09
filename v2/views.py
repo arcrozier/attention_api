@@ -33,7 +33,18 @@ def upload_public_key(request: Request) -> Response:
     good, response = check_params(['id', 'token'], request.data)
     if not good:
         return response
-    user, created = User.objects.update_or_create(public_key=request.data['id'], fcm_id=request.data['token'])
+
+    try:
+        with transaction.atomic(User):
+            user, created = User.objects.update_or_create(public_key=request.data['id'], fcm_id=request.data['token'])
+            if not created:
+                # An existing user is being updated - we need the caller to authenticate
+                verify_challenge(request.data['challenge'], request.data['id'], request.data['signature'])
+    except KeyError:
+        return Response(build_response(False, 'To update a user, a signed challenge must be provided'), status=403)
+    except InvalidSignature or Challenge.DoesNotExist:
+        return Response(build_response(False, 'The provided challenge was invalid or not signed correctly'), status=403)
+
     message: str
     if created:
         message = "Successfully created new user"
@@ -48,22 +59,12 @@ def send_alert(request: Request) -> Response:
     if not good:
         return response
 
-    challenge: Challenge
     try:
-        with transaction.atomic(using=Challenge):
-            # Lookup the valid challenge associated with the user - if a matching challenge doesn't exist, raises
-            # Challenge.DoesNotExist - establishes a lock on the row until the transaction completes
-            challenge = Challenge.objects.select_for_update().get(challenge=request.data['challenge'],
-                                                                  id_id=request.data['from'], valid=True)
-            # Verify that the challenge was signed by that id
-            if not verify_signature(str(challenge.challenge), request.data['signature'], challenge.id.public_key):
-                return Response(build_response(False, "Challenge verification failed"), status=403)
-
-            # Challenge is no longer valid
-            challenge.valid = False
-            challenge.save()
+        verify_challenge(request.data['challenge'], request.data['from'], request.data['signature'])
     except Challenge.DoesNotExist:
         return Response(build_response(False, "Challenge was not recognized"), status=403)
+    except InvalidSignature:
+        return Response(build_response(False, "Challenge verification failed"), status=403)
 
     token: str
     try:
@@ -88,13 +89,40 @@ def send_alert(request: Request) -> Response:
     return Response(build_response(True, "Successfully sent message"), status=200)
 
 
-def verify_signature(challenge: str, signature: str, public_key: str) -> bool:
-    loaded_key = serialization.load_pem_public_key(base64.b64decode(public_key))
-    try:
-        loaded_key.verify(base64.b64decode(signature), challenge.encode(), ec.ECDSA(hashes.SHA256()))
-        return True
-    except InvalidSignature:
-        return False
+def verify_challenge(challenge_str: str, user: str, signature: str):
+    """
+    Verifies and consumes a challenge
+    :param challenge_str: The challenge the client signed
+    :param user: The client's user id (public key - base64 DER encoding)
+    :param signature: The signature the client provided to verify
+
+    :raises InvalidSignature: If the signature was not correctly signed
+    :raises Challenge.DoesNotExist: If the challenge is not valid
+    """
+    with transaction.atomic(using=Challenge):
+        # Lookup the valid challenge associated with the user - if a matching challenge doesn't exist, raises
+        # Challenge.DoesNotExist - establishes a lock on the row until the transaction completes
+        challenge = Challenge.objects.select_for_update().get(challenge=challenge_str,
+                                                              id_id=user, valid=True)
+        # Verify that the challenge was signed by that id
+        verify_signature(str(challenge.challenge), signature, challenge.id.public_key)
+
+        # Challenge is no longer valid
+        challenge.valid = False
+        challenge.save()
+
+
+def verify_signature(challenge: str, signature: str, public_key: str) -> None:
+    """
+    Verifies whether the challenge was signed by the provided public_key
+    :param challenge: The unsigned version that the user signed
+    :param signature: The signature that the user signed with their private key
+    :param public_key: The public key associated with the private key used to sign
+
+    :throws InvalidSignature: If the challenge was improperly signed
+    """
+    loaded_key = serialization.load_der_public_key(base64.b64decode(public_key))
+    loaded_key.verify(base64.b64decode(signature), challenge.encode(), ec.ECDSA(hashes.SHA256()))
 
 
 def check_params(expected: list, holder: Dict) -> Tuple[bool, Response]:
