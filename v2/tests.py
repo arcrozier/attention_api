@@ -1,5 +1,7 @@
 import json
 
+from typing import Final
+
 from django.test import TestCase
 
 # Create your tests here.
@@ -9,10 +11,10 @@ from django.test import Client
 
 
 class APIV2TestSuite(TestCase):
-    PUBLIC_KEY1 = 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEw8VT4Fdb2TQm6OVu8wsasA65XQwnzv2jaVMn8+iGhgLlckf0vAh/xB6CCDhyaw' \
-                  'E9TCDlC66QfgpHW5Ld1CAw5w=='
-    PUBLIC_KEY2 = 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEuv6zaydP6LRu+VDl8ihLTWrYe2F0AEIoTWAeIvOjIdi' \
-                  '8N1v+QxCYpyByP3NuA3YylwFrcQTfMQwqtzWUuo8dMg=='
+    PUBLIC_KEY1: Final = 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEw8VT4Fdb2TQm6OVu8wsasA65XQwnzv2jaVMn8+iGhgLlckf0vAh' \
+                         '/xB6CCDhyawE9TCDlC66QfgpHW5Ld1CAw5w=='
+    PUBLIC_KEY2: Final = 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEuv6zaydP6LRu+VDl8ihLTWrYe2F0AEIoTWAeIvOjIdi' \
+                         '8N1v+QxCYpyByP3NuA3YylwFrcQTfMQwqtzWUuo8dMg=='
 
     def setUp(self):
         User.objects.create(public_key=self.PUBLIC_KEY1, fcm_id='Fake')
