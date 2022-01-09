@@ -158,9 +158,16 @@ class APIV2TestSuite(TestCase):
         database, challenges that aren't associated with the from id, to ids that aren't in the table,
         missing parameters, try weird characters/value in the message parameter (or in the other parameters)
 
-        Make sure after a challenge is used it isn't valid again
         Try to send two requests simultaneously and see if anything breaks (verify the rows get locked)
         Try to send an alert that "should" work, check response is 200
+        """
+        pass
+
+    def test_verify_challenge(self):
+        """
+        Make sure a challenge not in the database (but otherwise valid) fails
+        Make sure a challenge in the database but set to a different user fails
+        Make sure after a challenge is used it isn't valid again
         """
         pass
 
