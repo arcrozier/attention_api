@@ -120,6 +120,12 @@ class APIV2TestSuite(TestCase):
         c = Client()
         response = c.post('/v2/post_id', {'id': self.PUBLIC_KEY3})
         self.assertContains(response, '', status_code=400)
+        self.assertEqual(len(User.objects.filter(public_key=self.PUBLIC_KEY3)), 0)
+        response = c.put('/v2/post_id', {'id': self.PUBLIC_KEY2, 'token': 'Updated2'})
+        self.assertContains(response, '', status_code=400)
+        self.assertEqual(User.objects.get(public_key=self.PUBLIC_KEY2).fcm_id, 'Fake')
+        response = c.post('/v2/post_id')
+        self.assertContains(response, '', status_code=400)
 
     def test_get_challenge_simple(self):
         """
