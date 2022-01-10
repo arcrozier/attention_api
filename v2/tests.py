@@ -2,34 +2,35 @@ import json
 
 from typing import Final
 
+from cryptography.exceptions import InvalidSignature
 from django.test import TestCase
 
 # Create your tests here.
 from v2.models import User, Challenge
-from v2.views import check_params
+from v2.views import check_params, verify_signature
 from django.test import Client
 
 
 class APIV2TestSuite(TestCase):
-    PUBLIC_KEY1: Final = 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEw8VT4Fdb2TQm6OVu8wsasA65XQwnzv2jaVMn8+iGhgLlckf0vAh' \
-                         '/xB6CCDhyawE9TCDlC66QfgpHW5Ld1CAw5w=='
-    PUBLIC_KEY2: Final = 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEuv6zaydP6LRu+VDl8ihLTWrYe2F0AEIoTWAeIvOjIdi' \
-                         '8N1v+QxCYpyByP3NuA3YylwFrcQTfMQwqtzWUuo8dMg=='
-    PUBLIC_KEY3: Final = 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEgEOLhzzqZPP7ngKbWUv5FJ8HxcTIRrZqqddanCaKQ/3t7ZExB/wVsdr' \
-                         'u5BuHinrRwInKVz7ni1ZfyUdp9tlitg=='
-    PUBLIC_KEY4: Final = 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEC/GfZFNiVGCD0OGqclZc2+0k7Jdq16U3YMRqXjJ7GpJAMyy/2P9qdQA' \
-                         'NOxDXdPFsltLUJbHEJ4WrfbPFTzqIDg=='
+    PUBLIC_KEY1: Final = 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEyePddXQ/7etonmR8je86KWkEZp9SYgskV6dtNTrHEcKxN785l3DUiUN' \
+                         'H6EvOjBBQILmqRCZG5Qx8PkeNuil31g=='
+    PUBLIC_KEY2: Final = 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAExq+nma64kVfYVLQ++qERSjYK+Uy813Pozm/yBj0yWPFSVlOe5W3ijkK' \
+                         'z3krypcarGY4Jai9EMhQ+TUULwLc9aA=='
+    PUBLIC_KEY3: Final = 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAErT9ikbOBok+JmgK8tI2UkO4sxTZLe7oPHLdhpobo11RJ7SjGMXQsAeb' \
+                         '1LF+RBuqd/pgVfzXgDLAlyaRNqLbRFg=='
+    PUBLIC_KEY4: Final = 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEZECdX2euQmLy5T3f3PTLSksVhuJlzZmnI7cIcJYtBaHiWMMU/X6HMpF' \
+                         'DaDDwR2y5MjMwjSm8iHVPjlz9VezXQQ=='
 
-    CHALLENGE: Final = 'c~2:sdnzROtT[-Wi'
+    CHALLENGE: Final = 1
 
-    PUBLIC_KEY1_SIG: Final = 'MEUCIQDSH24rAyrRDy2R5XeBuxiHW7JIUgkOBn+jo9Bj33gTfgIgCctBjgiA3qMB/f9BqouwrrFQoyjbDbGZmG' \
-                             'mNq7jbVCM='
-    PUBLIC_KEY2_SIG: Final = 'MEUCIC5CuJ8JBuNoL7q3qox/P8wLoC+zWKGIEqjlqq6Cr31YAiEAz1O+IoK84cpbsZf0zZW3Ahvmesb1jQUYBE' \
-                             'OgscW/lkk='
-    PUBLIC_KEY3_SIG: Final = 'MEUCIQC6vqSZHNp7dZOkNX6Jojs+HiMqpQe+QiN0mUWOBRWZbQIgNKiI/CP0n9SHKvAHQSLMobqmDRQEFhoxPw' \
-                             'LO9pg9mWY='
-    PUBLIC_KEY4_SIG: Final = 'MEYCIQDdkVimWDHzfupbXFomraAtpjFOJL5bI+5zUCdmFOWF8AIhALI3JOOLGmhVNvTZzztv6HKZ8Xr0O27A8F' \
-                             'j1v4SD60d3'
+    PUBLIC_KEY1_SIG: Final = 'MEQCIAGFExdxxDAo5C/kE2GjN9DQ2B9wxLCtCv3WvXNIHecKAiBC6kGIFzbx8njck8N26zFrQONODDHJ2m/9Y7D' \
+                             '3tJE8XQ=='
+    PUBLIC_KEY2_SIG: Final = 'MEUCIQD9SfXzWVRquO1rANT/CCylPMmaQvNtZxXqw3qsfoMR6gIgL0vNdZhnUmHFzc64SQUOF9AoODuP8Hr0k9L' \
+                             'ylPlozrk='
+    PUBLIC_KEY3_SIG: Final = 'MEYCIQDrVF9r/dPHcG3nr0qxHa3msDDd/HtXc3ovddedHCXrUwIhAOUCpsqCBLNUwK5VuRcn7osbfkEgbN4VRGV' \
+                             'LvTzPKCNR'
+    PUBLIC_KEY4_SIG: Final = 'MEYCIQC+O1shtvJDRI+awVkXWkHz0E/EOJTgZwU3jH981sWxlAIhAMAOo0/BU0tCyqHNMQvtW2L6oGYuMU1SNIE' \
+                             'dwV4K8rj0'
 
     def setUp(self):
         User.objects.create(public_key=self.PUBLIC_KEY1, fcm_id='Fake')
@@ -183,7 +184,16 @@ class APIV2TestSuite(TestCase):
         the challenge it says it signed isn't what was actually signed) should return False
         Correctly signed challenges should return True
         """
-        pass
+        self.assertRaises(InvalidSignature, verify_signature, [str(self.CHALLENGE), self.PUBLIC_KEY1_SIG,
+                                                               self.PUBLIC_KEY2])
+        # The signature was signed by the provided public key, but it signed "2" not "1"
+        self.assertRaises(InvalidSignature, verify_signature, [str(self.CHALLENGE),
+                                                               'MEQCIAhi3nD7gPjxIkmzSa+xo8tln6+m0uW5I8IY+z5/gyWMAiBo'
+                                                               'npMP0lghf1oMlh2qEMRN9gGV6I5XEq2seFApVrDLhQ==',
+                                                               'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEcD3KRwFeDtHAQ69k'
+                                                               'Sz9/oeqdjfmH2pDHMLa54x1wQFKJ15gGl5LjBiiNyinyx59993jRh'
+                                                               'FG4ZEfFEL/iIjaMiw=='])
+        verify_signature(str(self.CHALLENGE), self.PUBLIC_KEY3_SIG, self.PUBLIC_KEY3)
 
     def test_check_params_simple(self):
         """
