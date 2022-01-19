@@ -22,7 +22,7 @@ def get_challenge(request: Request, public_key: str) -> Response:
         user = User.objects.get(public_key=public_key)
         challenge = Challenge(id=user)
         challenge.save()
-        return Response(build_response(True, "Successfully generated challenge", data=str(challenge)),
+        return Response(build_response(True, "Successfully generated challenge", data=str(challenge.challenge)),
                         status=200)
     except User.DoesNotExist:
         return Response(build_response(False, "An error occurred retrieving a challenge"), status=403)
@@ -121,8 +121,8 @@ def verify_signature(challenge: str, signature: str, public_key: str) -> None:
 
     :throws InvalidSignature: If the challenge was improperly signed
     """
-    loaded_key = serialization.load_der_public_key(base64.b64decode(public_key))
-    loaded_key.verify(base64.b64decode(signature), challenge.encode(), ec.ECDSA(hashes.SHA256()))
+    loaded_key = serialization.load_der_public_key(base64.urlsafe_b64decode(public_key))
+    loaded_key.verify(base64.urlsafe_b64decode(signature), challenge.encode(), ec.ECDSA(hashes.SHA256()))
 
 
 def check_params(expected: list, holder: Dict) -> Tuple[bool, Response]:
