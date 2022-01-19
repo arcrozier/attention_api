@@ -1,13 +1,18 @@
+import base64
 import json
+import random
 
 from typing import Final
 
 from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+from django.core.exceptions import ObjectDoesNotExist
 from django.test import TestCase
 
 # Create your tests here.
 from v2.models import User, Challenge
-from v2.views import check_params, verify_signature
+from v2.views import check_params, verify_signature, verify_challenge
 from django.test import Client
 
 
@@ -127,6 +132,8 @@ class APIV2TestSuite(TestCase):
         self.assertEqual(User.objects.get(public_key=self.PUBLIC_KEY2).fcm_id, 'Fake')
         response = c.post('/v2/post_id')
         self.assertContains(response, '', status_code=400)
+        response = c.get('v2/post_id', {'id': self.PUBLIC_KEY4, 'token': 'Updated2'})
+        self.assertContains(response, '', status_code=404)
 
     def test_get_challenge_simple(self):
         """
@@ -168,15 +175,41 @@ class APIV2TestSuite(TestCase):
         Try to send two requests simultaneously and see if anything breaks (verify the rows get locked)
         Try to send an alert that "should" work, check response is 200
         """
-        pass
+        # These should work
+        self.validate_challenge(self.PUBLIC_KEY1)
+        c = Client()
+        response = c.post('/v2/send_alert/', {'from': self.PUBLIC_KEY1, 'to': self.PUBLIC_KEY2, 'message': 'hi',
+                                              'challenge': self.CHALLENGE, 'signature': self.PUBLIC_KEY1_SIG})
+        self.assertContains(response, '')
+        self.validate_challenge(self.PUBLIC_KEY1)
+        response = c.post('/v2/send_alert/', {'from': self.PUBLIC_KEY1, 'to': self.PUBLIC_KEY2, 'message': None,
+                                              'challenge': self.CHALLENGE, 'signature': self.PUBLIC_KEY1_SIG})
+        self.assertContains(response, '')
+
+        # This should fail because it doesn't expect GET requests
+        self.validate_challenge(self.PUBLIC_KEY1)
+        response = c.get('/v2/send_alert/', {'from': self.PUBLIC_KEY1, 'to': self.PUBLIC_KEY2, 'message': 'hi',
+                                             'challenge': self.CHALLENGE, 'signature': self.PUBLIC_KEY1_SIG})
+        self.assertContains(response, '', status_code=404)
 
     def test_verify_challenge(self):
-        """
-        Make sure a challenge not in the database (but otherwise valid) fails
-        Make sure a challenge in the database but set to a different user fails
-        Make sure after a challenge is used it isn't valid again
-        """
-        pass
+        # Make sure after a challenge is used it isn't valid again
+        self.validate_challenge(self.PUBLIC_KEY1)
+        verify_challenge(str(self.CHALLENGE), self.PUBLIC_KEY1, self.PUBLIC_KEY1_SIG)
+        self.assertRaises(ObjectDoesNotExist, verify_challenge, [str(self.CHALLENGE), self.PUBLIC_KEY1,
+                                                                 self.PUBLIC_KEY1_SIG])
+
+        # Make sure a challenge in the database but set to a different user fails
+        self.validate_challenge(self.PUBLIC_KEY2)
+        self.assertRaises(ObjectDoesNotExist, verify_challenge, [str(self.CHALLENGE), self.PUBLIC_KEY1,
+                                                                 self.PUBLIC_KEY1_SIG])
+        self.assertRaises(ObjectDoesNotExist, verify_challenge, [str(self.CHALLENGE), self.PUBLIC_KEY3,
+                                                                 self.PUBLIC_KEY3_SIG])
+
+        # Make sure a challenge not in the database (but otherwise valid) fails
+        Challenge.objects.get(challenge=self.CHALLENGE).delete()
+        self.assertRaises(ObjectDoesNotExist, verify_challenge, [str(self.CHALLENGE), self.PUBLIC_KEY1,
+                                                                 self.PUBLIC_KEY1_SIG])
 
     def test_verify_signature(self):
         """
@@ -270,3 +303,118 @@ class APIV2TestSuite(TestCase):
         good, response = check_params(list_keys_extra, weird_dict)
         self.assertFalse(good)
         self.assertContains(response, 'key5_0', status_code=400)
+
+    def test_api_integration(self):
+
+        def sign(inner_challenge: str, inner_private_key: str):
+            key = serialization.load_der_private_key(base64.b64decode(inner_private_key), password=None)
+            return key.sign(inner_challenge.encode())
+
+        def test_alerts(status: int):
+            for inner_private_key, inner_challenge in users:
+                inner_response = c.post('/v2/send_alert', {'to': random.choice(users)[0],
+                                                           'from': inner_private_key.public_key(),
+                                                           'message': random.choice(('HI!! ', None)),
+                                                           'signature': sign(inner_challenge, inner_private_key),
+                                                           'challenge': inner_challenge})
+                self.assertContains(inner_response, '', status_code=status)
+
+        def get_challenges():
+            for inner_user in users:
+                inner_response = c.get(f'/v2/{inner_user[0].public_key()}')
+                self.assertContains(inner_response, '', status_code=200)
+                inner_response_json = json.loads(inner_response.body)
+                inner_user[1] = inner_response_json['data']
+
+        c = Client()
+        num_users: Final = 100
+
+        # Stores the users that are available - each element should be [private key, challenge]
+        users: list[list] = []
+        # Generate some users
+        for x in range(num_users):
+            users.append([ec.generate_private_key(ec.SECP256R1()), None])
+            response = c.post('/v2/post_id', {'id': users[x][0].public_key(), 'token': f'fake{x}'})
+            self.assertContains(response, '', status_code=200)
+
+        # Get challenges for the users
+        get_challenges()
+
+        # Send alerts from those users
+        test_alerts(200)
+
+        # Try to update the users with the same challenges (all should fail)
+        for private_key, _ in users:
+            response = c.post('/v2/post_id', {'id': private_key.public_key, 'token': f'fake{private_key}'})
+            self.assertContains(response, '', status_code=403)
+
+        # Get new challenges
+        get_challenges()
+
+        # Update the users with the new challenges
+        for private_key, challenge in users:
+            response = c.post('/v2/post_id', {'id': private_key.public_key, 'token': f'fake{private_key}',
+                                              'challenge': challenge, 'signature': sign(private_key, challenge)})
+            self.assertContains(response, '', status_code=200)
+
+        # Send alerts
+        test_alerts(403)
+
+        # Get new challenges
+        get_challenges()
+
+        # Send alerts
+        test_alerts(200)
+
+        for x in range(2):
+            # Try mismatching public keys and challenges
+            for x in range(num_users):
+                challenge_row = random.randint(0, num_users - 1)
+                if x == challenge_row:
+                    continue
+                response = c.post('/v2/send_alert', {'to': random.choice(users)[0],
+                                                     'from': users[x][0].public_key(),
+                                                     'message': random.choice(('HI!! ', None)),
+                                                     'signature': sign(users[challenge_row][1], users[x][0]),
+                                                     'challenge': users[challenge_row][1]})
+                self.assertContains(response, '', status_code=403)
+
+            # Get new challenges
+            get_challenges()
+
+        # Try mixed up parameters
+        for private_key, challenge in users:
+            response = c.post('/v2/send_alert', {'to': random.choice(users)[0],
+                                                 'from': private_key.public_key(),
+                                                 'message': random.choice(('HI!! ', None)),
+                                                 'signature': challenge,
+                                                 'challenge': sign(challenge, private_key)})
+            self.assertContains(response, '', status_code=400)
+
+        # Get new challenges
+        get_challenges()
+
+        # Try impersonating another user
+        for private_key, challenge in users:
+            random_to = random.choice(users)[0]
+            random_from = random.choice(users)[0]
+            if random_from == random_to:
+                continue
+            response = c.post('/v2/send_alert', {'to': random_to,
+                                                 'from': random_from,
+                                                 'message': random.choice(('HI!! ', None)),
+                                                 'signature': sign(challenge, private_key),
+                                                 'challenge': challenge})
+            self.assertContains(response, '', status_code=403)
+
+        # Try missing parameters
+        for private_key, challenge in users:
+            sample_dict = {'to': random.choice(users)[0],
+                           'from': private_key.public_key(),
+                           'message': random.choice(('HI!! ', None)),
+                           'signature': sign(challenge, private_key),
+                           'challenge': challenge}
+            selected_keys = random.sample(list(sample_dict), random.randint(0, len(sample_dict) - 1))
+            selected_params = {key: sample_dict[key] for key in selected_keys}
+            response = c.post('/v2/send_alert', selected_params)
+            self.assertContains(response, '', status_code=400)
