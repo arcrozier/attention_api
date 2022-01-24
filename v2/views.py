@@ -35,8 +35,9 @@ def upload_public_key(request: Request) -> Response:
         return response
 
     try:
-        with transaction.atomic(User):
-            user, created = User.objects.update_or_create(public_key=request.data['id'], fcm_id=request.data['token'])
+        with transaction.atomic():
+            user, created = User.objects.update_or_create(public_key=request.data['id'], defaults={
+                'fcm_id': request.data['token']})
             if not created:
                 # An existing user is being updated - we need the caller to authenticate
                 verify_challenge(request.data['challenge'], request.data['id'], request.data['signature'])
@@ -71,7 +72,10 @@ def send_alert(request: Request) -> Response:
         token = User.objects.get(public_key=request.data['from']).fcm_id
     except User.DoesNotExist:
         return Response(build_response(False, "User not found"), status=403)
-    firebase_app = firebase_admin.initialize_app()
+    try:
+        firebase_admin.initialize_app()
+    except ValueError:
+        print('app already initialized')
 
     message = messaging.Message(
         data={
@@ -99,7 +103,7 @@ def verify_challenge(challenge_str: str, user: str, signature: str):
     :raises InvalidSignature: If the signature was not correctly signed
     :raises Challenge.DoesNotExist: If the challenge is not valid
     """
-    with transaction.atomic(using=Challenge):
+    with transaction.atomic():
         # Lookup the valid challenge associated with the user - if a matching challenge doesn't exist, raises
         # Challenge.DoesNotExist - establishes a lock on the row until the transaction completes
         challenge = Challenge.objects.select_for_update().get(challenge=challenge_str,
