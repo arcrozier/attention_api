@@ -8,6 +8,7 @@ from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import ec
 from django.db import transaction
 from firebase_admin import messaging
+from firebase_admin.exceptions import InvalidArgumentError
 from rest_framework.decorators import api_view
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -62,7 +63,7 @@ def send_alert(request: Request) -> Response:
 
     try:
         verify_challenge(request.data['challenge'], request.data['from'], request.data['signature'])
-    except Challenge.DoesNotExist:
+    except (Challenge.DoesNotExist, ValueError):
         return Response(build_response(False, "Challenge was not recognized"), status=403)
     except InvalidSignature:
         return Response(build_response(False, "Challenge verification failed"), status=403)
@@ -88,7 +89,11 @@ def send_alert(request: Request) -> Response:
         ),
         token=token
     )
-    response = messaging.send(message)
+
+    try:
+        response = messaging.send(message)
+    except InvalidArgumentError as e:
+        return Response(build_response(False, f"An error occurred when sending message: {e.cause}"), status=400)
 
     return Response(build_response(True, "Successfully sent message"), status=200)
 
