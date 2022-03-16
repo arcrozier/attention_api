@@ -76,6 +76,8 @@ ASGI_APPLICATION = 'attention_api.asgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
+        'HOST': 'localhost',
+        'NAME': 'attention',
         'OPTIONS': {
             'service': 'attention',
             'passfile': '/var/local/db_credentials/attention'
