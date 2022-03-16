@@ -1,0 +1,13 @@
+[Unit]
+Description=Attention! API Backend
+Wants=network.target
+After=network.target
+
+[Service]
+ExecStart=/var/local/apps/attention_api/start.sh
+Restart=always
+RestartSec=10
+KillMode=mixed
+
+[Install]
+WantedBy=default.target
