@@ -3,4 +3,4 @@
 cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P
 export DJANGO_SETTINGS_MODULE='attention_api.production'
 source .venv/bin/activate
-hypercorn --bind localhost:8002 attention_api.asgi:application
+python3.9 -m hypercorn --bind localhost:8002 attention_api.asgi:application
