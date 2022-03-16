@@ -80,7 +80,6 @@ DATABASES = {
         'NAME': 'attention',
         'OPTIONS': {
             'service': 'attention',
-            'passfile': '/var/local/db_credentials/attention'
         }
     }
 }
