@@ -77,7 +77,7 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
         'OPTIONS': {
-            'service': '/etc/postgresql-common/.pg_service.conf',
+            'service': 'attention',
             'passfile': '/var/local/db_credentials/attention'
         }
     }
