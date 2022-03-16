@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 from django.core.asgi import get_asgi_application
 
 load_dotenv()
+load_dotenv('/var/local/db_credentials/attention_api.env')
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'attention_api.settings')
 

@@ -26,6 +26,10 @@ DEBUG = False
 
 ALLOWED_HOSTS = ['localhost']
 
+DB_NAME = 'attention'
+DB_USER = os.environ['ATTENTION_API_DB_USER']
+DB_PASS = os.environ['ATTENTION_API_DB_PASS']
+
 
 # Application definition
 INSTALLED_APPS = [
@@ -76,11 +80,11 @@ ASGI_APPLICATION = 'attention_api.asgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
+        'NAME': DB_NAME,
+        'USER': DB_USER,
+        'PASSWORD': DB_PASS,
         'HOST': 'localhost',
-        'NAME': 'attention',
-        'OPTIONS': {
-            'service': 'attention',
-        }
+        'PORT': '5432',
     }
 }
 
