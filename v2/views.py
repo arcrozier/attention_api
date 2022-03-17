@@ -139,12 +139,12 @@ def check_params(expected: list, holder: Dict) -> Tuple[bool, Response]:
     for expect in expected:
         if expect not in holder:
             missing.append(expect)
-    response = Response(build_response(False, f"Missing required parameter(s): {', '.join(missing)}", string=True),
+    response = Response(build_response(False, f"Missing required parameter(s): {', '.join(missing)}"),
                         status=400) if len(missing) != 0 else Response()
     return len(missing) == 0, response
 
 
-def build_response(success: bool, message: str, data: Any = None, string: bool = True) -> dict:
+def build_response(success: bool, message: str, data: Any = None, string: bool = False) -> dict:
     response = {
         "success": success,
         "message": message,

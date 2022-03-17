@@ -12,7 +12,9 @@ https://docs.djangoproject.com/en/3.2/ref/settings/
 import os
 from pathlib import Path
 
-os.environ.setdefault('ATTENTION_KEY', 'django-insecure-e9q-4fjk_(--+=joxtbs$2d1km39!7!4_u15851pxjc0pu5e(k')
+os.environ.setdefault('ATTENTION_API_KEY', 'django-insecure-e9q-4fjk_(--+=joxtbs$2d1km39!7!4_u15851pxjc0pu5e(k')
+os.environ.setdefault('ATTENTION_API_DB_USER', 'dummy')
+os.environ.setdefault('ATTENTION_API_DB_PASS', 'dummy')
 
 from . import production
 
@@ -24,7 +26,7 @@ BASE_DIR = production.BASE_DIR
 # See https://docs.djangoproject.com/en/3.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ['ATTENTION_KEY']
+SECRET_KEY = os.environ['ATTENTION_API_KEY']
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -86,3 +88,10 @@ STATIC_URL = '/static/'
 # https://docs.djangoproject.com/en/3.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+REST_FRAMEWORK = {
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',
+        'rest_framework.renderers.BrowsableAPIRenderer'
+    ]
+}
