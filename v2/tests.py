@@ -151,8 +151,8 @@ class APIV2TestSuite(TestCase):
         challenge = Challenge.objects.get(id__public_key=self.PUBLIC_KEY1)
         self.assertContains(response, str(challenge.challenge))
         response1 = c.get(f'/v2/get_challenge/{self.PUBLIC_KEY1}/')
-        response1_decoded = json.loads(response1.data)
-        response_decoded = json.loads(response.data)
+        response1_decoded = response1.data
+        response_decoded = response.data
         self.assertNotEqual(response_decoded['data'], response1_decoded['data'])
         self.assertEqual(Challenge.objects.filter(id__public_key=self.PUBLIC_KEY1).count(), 2)
 
@@ -160,7 +160,7 @@ class APIV2TestSuite(TestCase):
         self.assertContains(response, 'true', status_code=200)
         challenge = Challenge.objects.get(id__public_key=self.PUBLIC_KEY2)
         self.assertContains(response, str(challenge.challenge))
-        response_decoded = json.loads(response.data)
+        response_decoded = response.data
         self.assertEqual(str(challenge.challenge), response_decoded['data'])
         c.get(f'/v2/get_challenge/{self.PUBLIC_KEY2}/')
         self.assertEqual(Challenge.objects.filter(id_id=self.PUBLIC_KEY1).count(), 2)
@@ -276,13 +276,13 @@ class APIV2TestSuite(TestCase):
         # These should all fail
         good, response = check_params(list_params_extra, simple_dict)
         self.assertFalse(good)
-        self.assertIn('param4', response.data)
+        self.assertIn('param4', response.data['message'])
         self.assertEqual(response.status_code, 400)
         good, response = check_params(list_params, empty_dict)
         self.assertFalse(good)
-        self.assertIn('param1', response.data)
-        self.assertIn('param2', response.data)
-        self.assertIn('param3', response.data)
+        self.assertIn('param1', response.data['message'])
+        self.assertIn('param2', response.data['message'])
+        self.assertIn('param3', response.data['message'])
         self.assertEqual(response.status_code, 400)
 
     def test_check_params_weird(self):
@@ -307,7 +307,7 @@ class APIV2TestSuite(TestCase):
         self.assertTrue(good)
         good, response = check_params(list_keys_extra, weird_dict)
         self.assertFalse(good)
-        self.assertIn('key5_0', response.data)
+        self.assertIn('key5_0', response.data['message'])
         self.assertEqual(response.status_code, 400)
 
     def test_private_functions_private(self):
@@ -344,7 +344,7 @@ class APIV2TestSuite(TestCase):
             for inner_user in users:
                 inner_response = c.get(f'/v2/get_challenge/{base64_public_key(inner_user[0])}/')
                 self.assertContains(inner_response, '', status_code=200)
-                inner_response_json = json.loads(inner_response.data)
+                inner_response_json = inner_response.data
                 inner_user[1] = inner_response_json['data']
 
         def base64_public_key(inner_private_key):
