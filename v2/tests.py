@@ -10,42 +10,23 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.test import Client
 from django.test import TestCase
 
-from v2.models import User, Challenge
-from v2.views import check_params, verify_signature, verify_challenge
+from django.contrib.auth.models import User
+from rest_framework.authtoken.models import Token
+
+from v2.models import FCMTokens, Friend
+from v2.views import check_params
 
 
 # Create your tests here.
+# TODO check that unauthenticated requests are denied
 
 
 class APIV2TestSuite(TestCase):
-    PUBLIC_KEY1: Final = 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEdgrPmjIaYmYfbKfEKlFGZVo_gaPJH855GqAKCKZblvCxqqjjSscACXh' \
-                         'biNshfKzvZUQxXmPH6FcbKOsHPcWOpQ== '
-    PUBLIC_KEY2: Final = 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEqbqVxkXQcAYbr-dQLUX1QystJaEql_W9N6ZwGBr5wpo_vAtYvgGq2hW' \
-                         'Tewlp-9Ym7pBEDCMLGvFu-6EgYuntRg=='
-    PUBLIC_KEY3: Final = 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEcLIU2jdMTsW_tkmq_DdAjFd1pZx760aikBA_RQE9WrXJgKIRovgg_H2' \
-                         'TvIKBmugeUYUlS8yc95Kgvb6C_u1EqQ=='
-    PUBLIC_KEY4: Final = 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEbQriMnfHzQWgawpGNNS1hthbfakhBK21h2dRrS_msOIpTKqlBExc55K' \
-                         'm9U6t0zHOuBl_L2KCMr2kVr-FMK4h4A=='
-
-    CHALLENGE: Final = 1
-
-    PUBLIC_KEY1_SIG: Final = 'MEUCIQDLU+01TwU5SN0OkUOEv6ax5VefCHC7GmhhpDSpd7t0uAIgGUy02/QHoTYEoRRPtPRq3BdZ1n+KmRaoZDf' \
-                             'sfOP7v+E='
-    PUBLIC_KEY2_SIG: Final = 'MEUCIQDoRSmq8ppt3/YEJe65AWOVA04BozXXA24LKVcpoZTkwwIgL2SQRE+QmxKUoE7fyjkNu3RlkHa1vF62BoW' \
-                             'TkSi0w7E='
-    PUBLIC_KEY3_SIG: Final = 'MEYCIQDgZOi3GyV9Vcd7lKeppedopo1aOcyp/UKFWEQ9cZJGvQIhAP8BXXxxyLqUg9ytihmThav+blchihwR471' \
-                             'SDAo/+AA8'
-    PUBLIC_KEY4_SIG: Final = 'MEUCIQCjoweh1a6c4jPTobZofwVQIQm+SInYlud8qOayBxhoGAIgBmbc1M9P/ja96LaQshrtoZu0QA/fDAbFe55' \
-                             'R0zuefOM='
 
     def setUp(self):
-        User.objects.create(public_key=self.PUBLIC_KEY1, fcm_id='Fake1')
-        User.objects.create(public_key=self.PUBLIC_KEY2, fcm_id='Fake2')
-
-    @staticmethod
-    def validate_challenge(public_key: str):
-        Challenge.objects.update_or_create(challenge=APIV2TestSuite.CHALLENGE,
-                                           defaults={'id_id': public_key, 'valid': True})
+        User.objects.create_user(username='user1', password='my_password')
+        User.objects.create_user(username='user2', password='my_password2', first_name='will', last_name='smith')
+        self.token = Token.objects.create(user='user1')
 
     def test_add_user_simple(self):
         """
@@ -56,115 +37,59 @@ class APIV2TestSuite(TestCase):
         """
         c = Client()
         self.assertEqual(User.objects.count(), 2)
-        response = c.post('/v2/post_id/', {'id': self.PUBLIC_KEY3, 'token': 'Fake3'})
+        response = c.post('/v2/register_user/', {'username': 'user3', 'password': 'my_password3', 'first_name':
+                                                 'joe', 'last_name': 'blow'})
         self.assertContains(response, '')
         self.assertEqual(User.objects.count(), 3)
-        user3 = User.objects.get(public_key=self.PUBLIC_KEY3)
-        user1 = User.objects.get(public_key=self.PUBLIC_KEY1)
-        user2 = User.objects.get(public_key=self.PUBLIC_KEY2)
-        self.assertEqual(user3.fcm_id, 'Fake3')
-        self.assertEqual(user1.fcm_id, 'Fake1')
-        self.assertEqual(user2.fcm_id, 'Fake2')
-        self.validate_challenge(self.PUBLIC_KEY3)
-        response = c.put('/v2/post_id/', {'id': self.PUBLIC_KEY3,
-                                          'token': 'Updated3',
-                                          'signature': self.PUBLIC_KEY3_SIG,
-                                          'challenge': self.CHALLENGE}, content_type='application/json')
-        self.assertContains(response, '')
-        self.assertEqual(User.objects.count(), 3)
-        user3 = User.objects.get(public_key=self.PUBLIC_KEY3)
-        user1 = User.objects.get(public_key=self.PUBLIC_KEY1)
-        user2 = User.objects.get(public_key=self.PUBLIC_KEY2)
-        self.assertEqual(user3.fcm_id, 'Updated3')
-        self.assertEqual(user1.fcm_id, 'Fake1')
-        self.assertEqual(user2.fcm_id, 'Fake2')
+        user1 = User.objects.get(username='user1')
+        user2 = User.objects.get(username='user2')
+        user3 = User.objects.get(username='user3')
 
-        response = c.post('/v2/post_id/', {'id': self.PUBLIC_KEY4, 'token': 'Fake4'})
+        response = c.post('/v2/register_user/', {'username': 'user4', 'password': 'my_password4', 'first_name':
+                                                 'john', 'last_name': 'dohn'})
         self.assertContains(response, '')
         self.assertEqual(User.objects.count(), 4)
-        user4 = User.objects.get(public_key=self.PUBLIC_KEY4)
-        user3 = User.objects.get(public_key=self.PUBLIC_KEY3)
-        user1 = User.objects.get(public_key=self.PUBLIC_KEY1)
-        user2 = User.objects.get(public_key=self.PUBLIC_KEY2)
-        self.assertEqual(user3.fcm_id, 'Updated3')
-        self.assertEqual(user4.fcm_id, 'Fake4')
-        self.assertEqual(user1.fcm_id, 'Fake1')
-        self.assertEqual(user2.fcm_id, 'Fake2')
-        self.validate_challenge(self.PUBLIC_KEY3)
-        response = c.put('/v2/post_id/', {'id': self.PUBLIC_KEY3,
-                                          'token': 'Updated3.1',
-                                          'signature': self.PUBLIC_KEY3_SIG,
-                                          'challenge': self.CHALLENGE}, content_type='application/json')
-        self.assertContains(response, '')
-        self.assertEqual(User.objects.count(), 4)
-        user3 = User.objects.get(public_key=self.PUBLIC_KEY3)
-        user4 = User.objects.get(public_key=self.PUBLIC_KEY4)
-        user1 = User.objects.get(public_key=self.PUBLIC_KEY1)
-        user2 = User.objects.get(public_key=self.PUBLIC_KEY2)
-        self.assertEqual(user3.fcm_id, 'Updated3.1')
-        self.assertEqual(user4.fcm_id, 'Fake4')
-        self.assertEqual(user1.fcm_id, 'Fake1')
-        self.assertEqual(user2.fcm_id, 'Fake2')
-        self.validate_challenge(self.PUBLIC_KEY4)
-        response = c.put('/v2/post_id/', {'id': self.PUBLIC_KEY4,
-                                          'token': 'Updated4',
-                                          'signature': self.PUBLIC_KEY4_SIG,
-                                          'challenge': self.CHALLENGE}, content_type='application/json')
-        self.assertContains(response, '')
-        self.assertEqual(User.objects.count(), 4)
-        user3 = User.objects.get(public_key=self.PUBLIC_KEY3)
-        user4 = User.objects.get(public_key=self.PUBLIC_KEY4)
-        user1 = User.objects.get(public_key=self.PUBLIC_KEY1)
-        user2 = User.objects.get(public_key=self.PUBLIC_KEY2)
-        self.assertEqual(user3.fcm_id, 'Updated3.1')
-        self.assertEqual(user4.fcm_id, 'Updated4')
-        self.assertEqual(user1.fcm_id, 'Fake1')
-        self.assertEqual(user2.fcm_id, 'Fake2')
+        user1 = User.objects.get(username='user1')
+        user2 = User.objects.get(username='user2')
+        user3 = User.objects.get(username='user3')
+        user4 = User.objects.get(username='user4')
+
+    def test_register_device(self):
+        c = Client()
+        response = c.post('/v2/register_device/', {'fcm_token': 'fake token'})
+        self.assertContains(response, '', 401)
+        response = c.post('/v2/register_device/', {'fcm_token': 'fake token'}, HTTP_AUTHORIZATION=f'Token {self.token}')
+        self.assertContains(response, '', 200)
+        self.assertEqual(FCMTokens.objects.get(username='user1'), 'fake_token')
+        response = c.post('/v2/register_device/', {'fcm_token': 'fake token'}, HTTP_AUTHORIZATION=f'Token {self.token}')
+        self.assertContains(response, '', 400)
+        self.assertEqual(FCMTokens.objects.get(username='user1'), 'fake token')
+
+    def test_add_friend(self):
+        # Test undeleting a friend doesn't reset sent/received fields
+        c = Client()
+        response = c.post('/v2/add_friend/', {'username': 'user2'}, HTTP_AUTHORIZATION=f'Token {self.token}')
+        self.assertContains(response, '', 200)
+        self.assertEqual(Friend.objects.get(owner_id='user1', friend_id='user2'))
 
     def test_add_user_weird(self):
         """
         Test malformed requests (missing required parameters, too many parameters, etc.)
         """
         c = Client()
-        response = c.post('/v2/post_id/', {'id': self.PUBLIC_KEY3})
+        response = c.post('/v2/register_user/', {'username': 'user2', 'password': 'my_password3', 'first_name':
+                                                 'joe', 'last_name': 'blow'})
         self.assertContains(response, '', status_code=400)
-        self.assertEqual(User.objects.filter(public_key=self.PUBLIC_KEY3).count(), 0)
-        response = c.put('/v2/post_id/', {'id': self.PUBLIC_KEY2, 'token': 'Updated2'}, content_type='application/json')
-        self.assertContains(response, '', status_code=403)
-        self.assertEqual(User.objects.get(public_key=self.PUBLIC_KEY2).fcm_id, 'Fake2')
-        response = c.post('/v2/post_id/')
-        self.assertContains(response, '', status_code=400)
-        response = c.get('v2/post_id/', {'id': self.PUBLIC_KEY4, 'token': 'Updated2'})
+        self.assertEqual(User.objects.get(username='user2').first_name, 'will')
+        self.assertEqual(User.objects.get(username='user2').last_name, 'smith')
+        response = c.put('/v2/register_user/', {'id': 'user1', 'token': 'Updated2'},
+                         content_type='application/json')
         self.assertContains(response, '', status_code=404)
-
-    def test_get_challenge_simple(self):
-        """
-        This should test get_challenge
-        Request a challenge, make sure the one in the database is the same as the one returned
-        Test with invalid public_keys (or missing parameters)
-        Make sure no two challenges are the same
-        Check status codes
-        """
-        c = Client()
-        response = c.get(f'/v2/get_challenge/{self.PUBLIC_KEY1}/')
-        self.assertContains(response, 'true', status_code=200)
-        challenge = Challenge.objects.get(id__public_key=self.PUBLIC_KEY1)
-        self.assertContains(response, str(challenge.challenge))
-        response1 = c.get(f'/v2/get_challenge/{self.PUBLIC_KEY1}/')
-        response1_decoded = response1.data
-        response_decoded = response.data
-        self.assertNotEqual(response_decoded['data'], response1_decoded['data'])
-        self.assertEqual(Challenge.objects.filter(id__public_key=self.PUBLIC_KEY1).count(), 2)
-
-        response = c.get(f'/v2/get_challenge/{self.PUBLIC_KEY2}/')
-        self.assertContains(response, 'true', status_code=200)
-        challenge = Challenge.objects.get(id__public_key=self.PUBLIC_KEY2)
-        self.assertContains(response, str(challenge.challenge))
-        response_decoded = response.data
-        self.assertEqual(str(challenge.challenge), response_decoded['data'])
-        c.get(f'/v2/get_challenge/{self.PUBLIC_KEY2}/')
-        self.assertEqual(Challenge.objects.filter(id_id=self.PUBLIC_KEY1).count(), 2)
-        self.assertEqual(Challenge.objects.filter(id_id=self.PUBLIC_KEY2).count(), 2)
+        response = c.post('/v2/register_user/')
+        self.assertContains(response, '', status_code=400)
+        response = c.get('v2/register_user/', {'username': 'user3', 'password': 'my_password3', 'first_name':
+                                                 'joe', 'last_name': 'blow'})
+        self.assertContains(response, '', status_code=404)
 
     def test_send_alert(self):
         """
@@ -190,46 +115,8 @@ class APIV2TestSuite(TestCase):
         # self.assertContains(response, '')
 
         # This should fail because it doesn't expect GET requests
-        self.validate_challenge(self.PUBLIC_KEY1)
-        response = c.get('/v2/send_alert/', {'from': self.PUBLIC_KEY1, 'to': self.PUBLIC_KEY2, 'message': 'hi',
-                                             'challenge': self.CHALLENGE, 'signature': self.PUBLIC_KEY1_SIG})
+        response = c.get('/v2/send_alert/', {'to': 'user2', 'message': 'hi'}, HTTP_AUTHORIZATION=f'Token {self.token}')
         self.assertContains(response, '', status_code=405)
-
-    def test_verify_challenge(self):
-        # Make sure after a challenge is used it isn't valid again
-        self.validate_challenge(self.PUBLIC_KEY1)
-        verify_challenge(str(self.CHALLENGE), self.PUBLIC_KEY1, self.PUBLIC_KEY1_SIG)
-        self.assertRaises(ObjectDoesNotExist, verify_challenge, str(self.CHALLENGE), self.PUBLIC_KEY1,
-                          self.PUBLIC_KEY1_SIG)
-
-        # Make sure a challenge in the database but set to a different user fails
-        self.validate_challenge(self.PUBLIC_KEY2)
-        self.assertRaises(ObjectDoesNotExist, verify_challenge, str(self.CHALLENGE), self.PUBLIC_KEY1,
-                          self.PUBLIC_KEY1_SIG)
-        self.assertRaises(ObjectDoesNotExist, verify_challenge, str(self.CHALLENGE), self.PUBLIC_KEY3,
-                          self.PUBLIC_KEY3_SIG)
-
-        # Make sure a challenge not in the database (but otherwise valid) fails
-        Challenge.objects.get(challenge=self.CHALLENGE).delete()
-        self.assertRaises(ObjectDoesNotExist, verify_challenge, str(self.CHALLENGE), self.PUBLIC_KEY1,
-                          self.PUBLIC_KEY1_SIG)
-
-    def test_verify_signature(self):
-        """
-        Improperly signed challenges (signed by a key other than the presented one,
-        the challenge it says it signed isn't what was actually signed) should return False
-        Correctly signed challenges should return True
-        """
-        self.assertRaises(InvalidSignature, verify_signature, str(self.CHALLENGE), self.PUBLIC_KEY1_SIG,
-                          self.PUBLIC_KEY2)
-        # The signature was signed by the provided public key, but it signed "2" not "1"
-        self.assertRaises(InvalidSignature, verify_signature, str(self.CHALLENGE),
-                          'MEQCIAhi3nD7gPjxIkmzSa+xo8tln6+m0uW5I8IY+z5/gyWMAiBo'
-                          'npMP0lghf1oMlh2qEMRN9gGV6I5XEq2seFApVrDLhQ==',
-                          'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEcD3KRwFeDtHAQ69k'
-                          'Sz9/oeqdjfmH2pDHMLa54x1wQFKJ15gGl5LjBiiNyinyx59993jRh'
-                          'FG4ZEfFEL/iIjaMiw==')
-        verify_signature(str(self.CHALLENGE), self.PUBLIC_KEY3_SIG, self.PUBLIC_KEY3)
 
     def test_check_params_simple(self):
         """

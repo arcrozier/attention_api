@@ -1,15 +1,26 @@
+from django.contrib.auth.models import User
 from django.db import models
 
+
 # Create your models here.
-from django.db.models import CASCADE
+class Friend(models.Model):
+    owner = models.ForeignKey(User, on_delete=models.CASCADE)
+    friend = models.ForeignKey(User, on_delete=models.CASCADE)
+    sent = models.IntegerField(default=0)
+    received = models.IntegerField(default=0)
+    deleted = models.BooleanField(default=False)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['owner', 'friend'], name='unique_relationships')
+        ]
 
 
-class User(models.Model):
-    public_key = models.CharField(max_length=255, primary_key=True)
-    fcm_id = models.TextField(unique=True)
+class FCMTokens(models.Model):
+    username = models.ForeignKey(to=User, on_delete=models.CASCADE)
+    fcm_token = models.TextField()
 
-
-class Challenge(models.Model):
-    challenge = models.BigAutoField(primary_key=True)
-    id = models.ForeignKey(to=User, on_delete=CASCADE)
-    valid = models.BooleanField(default=True)
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['username', 'fcm_token'], name='no_duplicate_user_tokens')
+        ]

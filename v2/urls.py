@@ -16,9 +16,15 @@ Including another URLconf
 from django.urls import path
 
 from . import views
+from rest_framework.authtoken import views as auth_views
 
 urlpatterns = [
-    path('get_challenge/<str:public_key>/', views.get_challenge),
-    path('post_id/', views.upload_public_key),
+    path('api-token-auth/', auth_views.obtain_auth_token),
     path('send_alert/', views.send_alert),
+    path('register_device/', views.register_device),
+    path('register_user/', views.register_user),
+    path('add_friend/', views.add_friend),
+    path('delete_friend/', views.delete_friend),
+    path('edit/', views.edit_user),
+    path('get_info/', views.get_user_info)
 ]

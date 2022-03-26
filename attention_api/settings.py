@@ -13,8 +13,6 @@ import os
 from pathlib import Path
 
 os.environ.setdefault('ATTENTION_API_KEY', 'django-insecure-e9q-4fjk_(--+=joxtbs$2d1km39!7!4_u15851pxjc0pu5e(k')
-os.environ.setdefault('ATTENTION_API_DB_USER', 'dummy')
-os.environ.setdefault('ATTENTION_API_DB_PASS', 'dummy')
 
 from . import production
 
@@ -57,6 +55,8 @@ DATABASES = {
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
+
+LOGGING = production.LOGGING
 
 
 # Password validation
