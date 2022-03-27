@@ -231,7 +231,11 @@ def send_alert(request: Request) -> Response:
 
     Requires authentication.
 
-    Returns status 400 on error and no data
+    Returns status 400 on error
+    On success, returns the following data:
+    {
+        'id': <alert id>
+    }
     """
     # unauthenticated requests should be denied automatically - test this
     good, response = check_params(['to', 'message'], request.data)
@@ -279,7 +283,7 @@ def send_alert(request: Request) -> Response:
 
     if not at_least_one_success:
         return Response(build_response(False, f"Unable to send message"), status=400)
-    return Response(build_response(True, "Successfully sent message"), status=200)
+    return Response(build_response(True, "Successfully sent message", data={'id': alert_id}), status=200)
 
 
 @api_view(['POST'])
@@ -287,13 +291,50 @@ def alert_read(request: Request) -> Response:
     """
     Sends a signal to dismiss an alert on all of the user's other devices.
 
-    Requires `alert_id` and `fcm_token` parameters to be set.
+    Requires `alert_id`, `from`, and `fcm_token` parameters to be set.
 
     Requires authentication.
 
     Returns no data.
     """
-    pass  # TODO
+    good, response = check_params(['alert_id', 'from', 'fcm_token'], request.data)
+    if not good:
+        return response
+
+    tokens: QuerySet = FCMTokens.objects.filter(username=request.data['from']).exclude(fcm_token=request.data[
+        'fcm_token']).union(FCMTokens.objects.filter(username=request.user.username))
+
+    if len(tokens) == 0:
+        logger.warning("Could not find tokens for recipient or the users other devices")
+        return Response(build_response(False, f'An error occurred'), status=500)
+    try:
+        firebase_admin.initialize_app()
+    except ValueError:
+        logger.info('Firebase Admin app already initialized')
+
+    at_least_one_success: bool = False
+    alert_id = time.time()
+    for token in tokens:
+        message = messaging.Message(
+            data={
+                'action': 'read',
+                'alert_id': alert_id,
+            },
+            android=messaging.AndroidConfig(
+                priority='low'
+            ),
+            token=token
+        )
+
+        try:
+            response = messaging.send(message)
+            at_least_one_success = True
+        except InvalidArgumentError as e:
+            logger.warning(f'An alert failed to send: {e.cause}')
+
+    if not at_least_one_success:
+        return Response(build_response(False, f"Unable to send read status"), status=400)
+    return Response(build_response(True, "Successfully sent read status"), status=200)
 
 
 def check_params(expected: list, holder: Dict) -> Tuple[bool, Response]:
