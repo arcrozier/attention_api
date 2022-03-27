@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 @api_view(['POST'])
 def register_device(request: Request) -> Response:
     """
-    Registers a device for receiving alerts for an account.
+    POST: Registers a device for receiving alerts for an account.
 
     Requires `fcm_token` parameter to be set to the Firebase Cloud Messaging token to use for that device
 
@@ -97,7 +97,7 @@ def add_friend(request: Request) -> Response:
         return Response(build_response(False, 'An error occurred when restoring friend'), 400)
 
 
-@api_view(['GET'])
+@api_view(['GET', 'HEAD'])
 def get_friend_name(request: Request) -> Response:
     """
     GET: Gets the name corresponding to a particular username.
@@ -186,7 +186,7 @@ def edit_user(request: Request) -> Response:
     return Response(build_response(True, 'User updated successfully'), status=200)
 
 
-@api_view(['GET'])
+@api_view(['GET', 'HEAD'])
 def get_user_info(request: Request) -> Response:
     """
     GET: Returns a data dump based on the user used to authenticate.
@@ -289,7 +289,7 @@ def send_alert(request: Request) -> Response:
 @api_view(['POST'])
 def alert_read(request: Request) -> Response:
     """
-    Sends a signal to dismiss an alert on all of the user's other devices.
+    POST: Sends a signal to dismiss an alert on all of the user's other devices.
 
     Requires `alert_id`, `from`, and `fcm_token` parameters to be set.
 

@@ -20,6 +20,11 @@ from v2.views import check_params
 # Create your tests here.
 # TODO check that missing parameters cause failure (for all endpoints)
 
+auth_required_post_endpoints = ['send_alert', 'register_device', 'add_friend', 'alert_read']
+auth_required_get_endpoints = ['get_name', 'get_info']
+auth_required_delete_endpoints = ['delete_friend']
+auth_required_put_endpoints = ['edit']
+
 
 class APIV2TestSuite(TestCase):
 
@@ -264,6 +269,68 @@ class APIV2TestSuite(TestCase):
         self.assertContains(response, '', status_code=404)
         response = c.get('/v2/verify_challenge/')
         self.assertContains(response, '', status_code=404)
+
+    def test_auth_enforced(self):
+        c = Client()
+        for endpoint in auth_required_post_endpoints:
+            response = c.post(f'/v2/{endpoint}/')
+            self.assertContains(response, '', status_code=401)
+            response = c.post(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            self.assertContains(response, '', status_code=403)
+
+            response = c.get(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            self.assertContains(response, '', status_code=405)
+            response = c.put(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            self.assertContains(response, '', status_code=405)
+            response = c.delete(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            self.assertContains(response, '', status_code=405)
+            response = c.patch(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            self.assertContains(response, '', status_code=405)
+
+        for endpoint in auth_required_get_endpoints:
+            response = c.get(f'/v2/{endpoint}/')
+            self.assertContains(response, '', status_code=401)
+            response = c.get(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            self.assertContains(response, '', status_code=403)
+
+            response = c.post(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            self.assertContains(response, '', status_code=405)
+            response = c.put(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            self.assertContains(response, '', status_code=405)
+            response = c.delete(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            self.assertContains(response, '', status_code=405)
+            response = c.patch(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            self.assertContains(response, '', status_code=405)
+
+        for endpoint in auth_required_delete_endpoints:
+            response = c.delete(f'/v2/{endpoint}/')
+            self.assertContains(response, '', status_code=401)
+            response = c.delete(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            self.assertContains(response, '', status_code=403)
+
+            response = c.get(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            self.assertContains(response, '', status_code=405)
+            response = c.put(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            self.assertContains(response, '', status_code=405)
+            response = c.post(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            self.assertContains(response, '', status_code=405)
+            response = c.patch(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            self.assertContains(response, '', status_code=405)
+
+        for endpoint in auth_required_put_endpoints:
+            response = c.put(f'/v2/{endpoint}/')
+            self.assertContains(response, '', status_code=401)
+            response = c.put(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            self.assertContains(response, '', status_code=403)
+
+            response = c.get(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            self.assertContains(response, '', status_code=405)
+            response = c.post(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            self.assertContains(response, '', status_code=405)
+            response = c.delete(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            self.assertContains(response, '', status_code=405)
+            response = c.patch(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            self.assertContains(response, '', status_code=405)
 
     def test_api_integration(self):
 
