@@ -80,11 +80,26 @@ def delete_friend(request: Request) -> Response:
     good, response = check_params(['friend'], request.data)
     if not good:
         return response
-    pass
+
+    try:
+        friend = Friend.objects.get(owner_id=request.user.username, friend_id=request.data['friend'])
+        friend.deleted = True
+        friend.save()
+        return Response(build_response(True, 'Successfully deleted friend'), status=200)
+    except Friend.DoesNotExist:
+        return Response(build_response(False, 'Could not delete friend as you were not friends'), status=400)
+
+
+@api_view(['DELETE'])
+def delete_user_data(request: Request) -> Response:
+    User.objects.get(username=request.user.username).delete()
+    return Response(build_response(True, 'Successfully deleted user data'), status=200)
 
 
 @api_view(['PUT'])
 def edit_user(request: Request) -> Response:
+    user = User.objects.get(username=request.user.username)
+    if request
     pass
     # This can take first name, last name, and/or password as parameters - if password is provided, delete the token
     # and update the password

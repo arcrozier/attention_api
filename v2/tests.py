@@ -38,7 +38,7 @@ class APIV2TestSuite(TestCase):
         c = Client()
         self.assertEqual(User.objects.count(), 2)
         response = c.post('/v2/register_user/', {'username': 'user3', 'password': 'my_password3', 'first_name':
-                                                 'joe', 'last_name': 'blow'})
+            'joe', 'last_name': 'blow'})
         self.assertContains(response, '')
         self.assertEqual(User.objects.count(), 3)
         user1 = User.objects.get(username='user1')
@@ -46,7 +46,7 @@ class APIV2TestSuite(TestCase):
         user3 = User.objects.get(username='user3')
 
         response = c.post('/v2/register_user/', {'username': 'user4', 'password': 'my_password4', 'first_name':
-                                                 'john', 'last_name': 'dohn'})
+            'john', 'last_name': 'dohn'})
         self.assertContains(response, '')
         self.assertEqual(User.objects.count(), 4)
         user1 = User.objects.get(username='user1')
@@ -70,7 +70,22 @@ class APIV2TestSuite(TestCase):
         c = Client()
         response = c.post('/v2/add_friend/', {'username': 'user2'}, HTTP_AUTHORIZATION=f'Token {self.token}')
         self.assertContains(response, '', 200)
-        self.assertEqual(Friend.objects.get(owner_id='user1', friend_id='user2'))
+        friend: Friend = Friend.objects.get(owner_id='user1', friend_id='user2')
+        self.assertEqual(friend,
+                         Friend(owner_id='user1', friend_id='user2', sent=0, received=0, deleted=False))
+        friend.sent = 1
+        friend.received = 2
+        friend.save()
+        response = c.post('/v2/add_friend/', {'username': 'user2'}, HTTP_AUTHORIZATION=f'Token {self.token}')
+        friend = Friend.objects.get(owner_id='user1', friend_id='user2')
+        self.assertEqual(friend,
+                         Friend(owner_id='user1', friend_id='user2', sent=1, received=2, deleted=False))
+        friend.deleted = True
+        friend.save()
+        response = c.post('/v2/add_friend/', {'username': 'user2'}, HTTP_AUTHORIZATION=f'Token {self.token}')
+        friend = Friend.objects.get(owner_id='user1', friend_id='user2')
+        self.assertEqual(friend,
+                         Friend(owner_id='user1', friend_id='user2', sent=1, received=2, deleted=False))
 
     def test_add_user_weird(self):
         """
@@ -78,7 +93,7 @@ class APIV2TestSuite(TestCase):
         """
         c = Client()
         response = c.post('/v2/register_user/', {'username': 'user2', 'password': 'my_password3', 'first_name':
-                                                 'joe', 'last_name': 'blow'})
+            'joe', 'last_name': 'blow'})
         self.assertContains(response, '', status_code=400)
         self.assertEqual(User.objects.get(username='user2').first_name, 'will')
         self.assertEqual(User.objects.get(username='user2').last_name, 'smith')
@@ -88,7 +103,7 @@ class APIV2TestSuite(TestCase):
         response = c.post('/v2/register_user/')
         self.assertContains(response, '', status_code=400)
         response = c.get('v2/register_user/', {'username': 'user3', 'password': 'my_password3', 'first_name':
-                                                 'joe', 'last_name': 'blow'})
+            'joe', 'last_name': 'blow'})
         self.assertContains(response, '', status_code=404)
 
     def test_send_alert(self):
