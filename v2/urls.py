@@ -19,11 +19,14 @@ from . import views
 from rest_framework.authtoken import views as auth_views
 
 urlpatterns = [
+    # POST: requires valid `username` and `password` parameters. Returns
+    # { 'token' : '<token>' }
     path('api-token-auth/', auth_views.obtain_auth_token),
     path('send_alert/', views.send_alert),
     path('register_device/', views.register_device),
     path('register_user/', views.register_user),
     path('add_friend/', views.add_friend),
+    path('get_name/', views.get_friend_name),
     path('delete_friend/', views.delete_friend),
     path('edit/', views.edit_user),
     path('get_info/', views.get_user_info)

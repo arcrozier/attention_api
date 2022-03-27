@@ -18,7 +18,7 @@ from v2.views import check_params
 
 
 # Create your tests here.
-# TODO check that unauthenticated requests are denied
+# TODO check that missing parameters cause failure (for all endpoints)
 
 
 class APIV2TestSuite(TestCase):
@@ -26,7 +26,9 @@ class APIV2TestSuite(TestCase):
     def setUp(self):
         User.objects.create_user(username='user1', password='my_password')
         User.objects.create_user(username='user2', password='my_password2', first_name='will', last_name='smith')
+        Friend.objects.create(owner_id='user2', friend_id='user1', sent=3)
         self.token = Token.objects.create(user='user1')
+        self.token2 = Token.objects.create(user='user2')
 
     def test_add_user_simple(self):
         """
@@ -105,6 +107,44 @@ class APIV2TestSuite(TestCase):
         response = c.get('v2/register_user/', {'username': 'user3', 'password': 'my_password3', 'first_name':
             'joe', 'last_name': 'blow'})
         self.assertContains(response, '', status_code=404)
+
+    def test_get_friend_name(self):
+        c = Client()
+        response = c.get('/v2/get_name/', {'username': 'user2'}, HTTP_AUTHORIZATION=f'Token {self.token}')
+        self.assertEqual(response.data, {'first_name': 'will', 'last_name': 'smith'})
+
+    def test_delete_friend(self):
+        c = Client()
+        response = c.get('/v2/delete_friend/', {'friend': 'user2'}, HTTP_AUTHORIZATION=f'Token {self.token2}')
+        self.assertContains(response, '', status_code=200)
+        Friend.objects.get(owner_id='user1', friend_id='user2', sent=2, received=0, deleted=True)
+
+    def test_edit_user(self):
+        c = Client()
+        response = c.put('/v2/edit/', {'first_name': 'aaron'}, HTTP_AUTHORIZATION=f'Token {self.token}',
+                         content_type='application/json')
+        self.assertContains(response, '', status_code=200)
+        self.assertEqual(User.objects.get(username='user1').first_name, 'aaron')
+        self.assertEqual(User.objects.get(username='user1').last_name, 'smith')
+
+        response = c.put('/v2/edit/', {'last_name': 'adams'}, HTTP_AUTHORIZATION=f'Token {self.token}',
+                         content_type='application/json')
+        self.assertContains(response, '', status_code=200)
+        self.assertEqual(User.objects.get(username='user1').first_name, 'aaron')
+        self.assertEqual(User.objects.get(username='user1').last_name, 'adams')
+
+        password = User.objects.get(username='user1').password
+        response = c.put('/v2/edit/', {'password': 'password'}, HTTP_AUTHORIZATION=f'Token {self.token}',
+                         content_type='application/json')
+        self.assertContains(response, '', status_code=200)
+        self.assertEqual(User.objects.get(username='user1').first_name, 'aaron')
+        self.assertEqual(User.objects.get(username='user1').last_name, 'adams')
+        self.assertNotEqual(User.objects.get(username='user1').password, password)
+        self.assertNotEqual(User.objects.get(username='user1').password, 'password')
+
+    def test_auth_required(self):
+        # TODO - go through all methods and ensure they fail when: no token is provided, an incorrect token is provided
+        pass
 
     def test_send_alert(self):
         """
@@ -227,12 +267,14 @@ class APIV2TestSuite(TestCase):
 
     def test_api_integration(self):
 
+        # TODO delete
         def sign(inner_challenge: str, inner_private_key):
             # key = serialization.load_der_private_key(base64.b64decode(inner_private_key), password=None)
             return base64.urlsafe_b64encode(inner_private_key.sign(inner_challenge.encode(), ec.ECDSA(hashes.SHA256(
 
             )))).decode()
 
+        # TODO update parameters
         def test_alerts(status: int):
             for inner_private_key, inner_challenge in users:
                 inner_response = c.post('/v2/send_alert/', {'to': base64_public_key(random.choice(users)[0]),
@@ -242,6 +284,7 @@ class APIV2TestSuite(TestCase):
                                                             'challenge': inner_challenge})
                 self.assertContains(inner_response, '', status_code=status)
 
+        # TODO replace with getting tokens
         def get_challenges():
             for inner_user in users:
                 inner_response = c.get(f'/v2/get_challenge/{base64_public_key(inner_user[0])}/')
@@ -249,6 +292,7 @@ class APIV2TestSuite(TestCase):
                 inner_response_json = inner_response.data
                 inner_user[1] = inner_response_json['data']
 
+        # TODO delete
         def base64_public_key(inner_private_key):
             return base64.urlsafe_b64encode(inner_private_key.public_key().public_bytes(
                 encoding=serialization.Encoding.DER,
@@ -262,6 +306,7 @@ class APIV2TestSuite(TestCase):
         users: list[list] = []
         # Generate some users
         for x in range(num_users):
+            # TODO replace this with registering users
             private_key = ec.generate_private_key(ec.SECP256R1())
             assert [private_key, None] not in users
             users.append([private_key, None])
@@ -271,52 +316,17 @@ class APIV2TestSuite(TestCase):
         # Get challenges for the users
         get_challenges()
 
-        # Send alerts from those users
-        # test_alerts(200)
-
-        # Try to update the users with the same challenges (all should fail)
-        for private_key, _ in users:
-            public_key = base64_public_key(private_key)
-            response = c.post('/v2/post_id/', {'id': public_key, 'token': f'fake{public_key}'})
-            self.assertContains(response, '', status_code=403)
-
-        # Get new challenges
-        get_challenges()
-
         # Update the users with the new challenges
         for private_key, challenge in users:
+            # TODO replace with updating some user parameter - name or something
             public_key = base64_public_key(private_key)
             response = c.post('/v2/post_id/', {'id': public_key, 'token': f'fake{public_key}',
                                                'challenge': challenge, 'signature': sign(challenge, private_key)})
             self.assertContains(response, '', status_code=200)
 
-        # Send alerts
-        test_alerts(403)
-
-        # Get new challenges
-        get_challenges()
-
-        # Send alerts
-        # test_alerts(200)
-
-        for x in range(2):
-            # Try mismatching public keys and challenges
-            for y in range(num_users):
-                challenge_row = random.randint(0, num_users - 1)
-                if y == challenge_row:
-                    continue
-                response = c.post('/v2/send_alert/', {'to': base64_public_key(random.choice(users)[0]),
-                                                      'from': base64_public_key(users[y][0]),
-                                                      'message': random.choice(('HI!! ', '')),
-                                                      'signature': sign(users[challenge_row][1], users[y][0]),
-                                                      'challenge': users[challenge_row][1]})
-                self.assertContains(response, '', status_code=403)
-
-            # Get new challenges
-            get_challenges()
-
         # Try mixed up parameters
         for private_key, challenge in users:
+            # TODO update parameters
             response = c.post('/v2/send_alert/', {'to': base64_public_key(random.choice(users)[0]),
                                                   'from': base64_public_key(private_key),
                                                   'message': random.choice(('HI!! ', '')),
@@ -324,25 +334,9 @@ class APIV2TestSuite(TestCase):
                                                   'challenge': sign(challenge, private_key)})
             self.assertContains(response, '', status_code=403)
 
-        # Get new challenges
-        get_challenges()
-
-        # Try impersonating another user
-        for private_key, challenge in users:
-            private_from = random.choice(users)[0]
-            random_to = base64_public_key(random.choice(users)[0])
-            random_from = base64_public_key(private_from)
-            if random_from == random_to or private_from == private_key:
-                continue
-            response = c.post('/v2/send_alert/', {'to': random_to,
-                                                  'from': random_from,
-                                                  'message': random.choice(('HI!! ', '')),
-                                                  'signature': sign(challenge, private_key),
-                                                  'challenge': challenge})
-            self.assertContains(response, '', status_code=403)
-
         # Try missing parameters
         for private_key, challenge in users:
+            # TODO update parameters
             sample_dict = {'to': base64_public_key(random.choice(users)[0]),
                            'from': base64_public_key(private_key),
                            'message': random.choice(('HI!! ', '')),

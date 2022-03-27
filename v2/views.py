@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 from typing import Any, Tuple, Dict
 
 import firebase_admin
@@ -14,12 +15,24 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from v2.models import FCMTokens, Friend
+from v2.serializers import FriendSerializer
 
 logger = logging.getLogger(__name__)
 
 
 @api_view(['POST'])
 def register_device(request: Request) -> Response:
+    """
+    Registers a device for receiving alerts for an account.
+
+    Requires `fcm_token` parameter to be set to the Firebase Cloud Messaging token to use for that device
+
+    Requires authentication.
+
+    Returns status 400 if the token is already registered to the account
+    Returns status 200 otherwise
+    No data is returned.
+    """
     good, response = check_params(['fcm_token'], request.data)
     if not good:
         return response
@@ -34,6 +47,19 @@ def register_device(request: Request) -> Response:
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def register_user(request: Request) -> Response:
+    """
+    POST: Registers a new user account with the provided credentials
+
+    Requires `first_name`, `last_name`, `username`, and `password`. Optionally accepts `email` as well. Username will be
+    a unique identifier for the user. Email is currently not used, but may at some point be used for password reset/MFA/
+    account alerts.
+
+    Does not require authentication.
+
+    If the username is already taken: returns status 400 with message "Username taken"
+    Otherwise: status 200
+    Returns no data.
+    """
     good, response = check_params(['first_name', 'last_name', 'username', 'password'], request.data)
     if not good:
         return response
@@ -49,6 +75,16 @@ def register_user(request: Request) -> Response:
 
 @api_view(['POST'])
 def add_friend(request: Request) -> Response:
+    """
+    POST: Adds a user as a friend of the authenticated user. This allows the other user to send messages to the authenticated
+    user, but not the other way around (unless that user adds this user as a friend).
+
+    Requires the `username` parameter to be set.
+
+    Requires authentication.
+
+    Returns no data.
+    """
     good, response = check_params(['username'], request.data)
     if not good:
         return response
@@ -63,12 +99,25 @@ def add_friend(request: Request) -> Response:
 
 @api_view(['GET'])
 def get_friend_name(request: Request) -> Response:
-    good, response = check_params(['username'], request.data)
+    """
+    GET: Gets the name corresponding to a particular username.
+
+    Requires the `username` parameter.
+
+    Requires authentication.
+
+    Returns the following data:
+    {
+        first_name: <user's first name>,
+        last_name: <user's last name>
+    }
+    """
+    good, response = check_params(['username'], request.query_params)
     if not good:
         return response
 
     try:
-        friend: User = User.objects.get(username=request.data['username'])
+        friend: User = User.objects.get(username=request.query_params['username'])
         return Response(build_response(True, 'Got name', {'first_name': friend.first_name, 'last_name':
             friend.last_name}), status=200)
     except User.DoesNotExist:
@@ -77,6 +126,15 @@ def get_friend_name(request: Request) -> Response:
 
 @api_view(['DELETE'])
 def delete_friend(request: Request) -> Response:
+    """
+    DELETE: This friend relationship will be lazy-deleted, and can be fully undone by adding the friend back.
+
+    Requires the `friend` parameter to be set to a current friend of the authenticated user.
+
+    Requires authentication.
+
+    Returns status 400 if the other user is not a friend, and no data.
+    """
     good, response = check_params(['friend'], request.data)
     if not good:
         return response
@@ -92,30 +150,89 @@ def delete_friend(request: Request) -> Response:
 
 @api_view(['DELETE'])
 def delete_user_data(request: Request) -> Response:
+    """
+    DELETE: Truly deletes all data associated with the authenticated user (not lazy deletion, cannot be
+    undone). Includes references to the user other people have in their friend lists, etc.
+
+    Accepts no parameters.
+
+    Requires authentication.
+
+    Returns no data.
+    """
     User.objects.get(username=request.user.username).delete()
     return Response(build_response(True, 'Successfully deleted user data'), status=200)
 
 
 @api_view(['PUT'])
 def edit_user(request: Request) -> Response:
-    user = User.objects.get(username=request.user.username)
-    if request
-    pass
-    # This can take first name, last name, and/or password as parameters - if password is provided, delete the token
-    # and update the password
+    """
+    PUT: Updates the corresponding fields for the authenticated user.
+
+    Has 3 optional parameters: `first_name`, `last_name`, and `password`.
+
+    Requires authentication.
+
+    Returns no data.
+    """
+    user = request.user
+    if 'first_name' in request.data:
+        user.first_name = request.data['first_name']
+    if 'last_name' in request.data:
+        user.last_name = request.data['last_name']
+    if 'password' in request.data:
+        user.set_password(request.data['password'])
+    user.save()
+    return Response(build_response(True, 'User updated successfully'), status=200)
 
 
 @api_view(['GET'])
 def get_user_info(request: Request) -> Response:
-    pass
+    """
+    GET: Returns a data dump based on the user used to authenticate.
 
+    Accepts no parameters.
 
-# This should return all the user data (except username/password): first name, last name, all friends, all messages (
-# when implemented)
+    Requires authentication.
+
+    On success, returns the following in the data field:
+    {
+        first_name: <user's first name>,
+        last_name: <user's last name>,
+        friends: [
+            {
+                owner: <username>,
+                friend: <friend's username>,
+                sent: <number of messages sent to friend>,
+                received: <number of messages received from friend>
+            },
+            ...
+        ]
+    }
+    """
+    user: User = request.user
+    friends = [FriendSerializer(x) for x in Friend.objects.filter(owner_id=user.username)]
+    data = {
+        'first_name': user.first_name,
+        'last_name': user.last_name,
+        'friends': friends,
+    }
+    return Response(build_response(True, 'Got user data', data=data), status=200)
 
 
 @api_view(['POST'])
 def send_alert(request: Request) -> Response:
+    """
+    POST: Sends an alert with an optional message to a user. The user must have the authenticated user added as a friend
+    for this to succeed.
+
+    Requires `to` and `message` to be set as parameters. If `message` is 'null', the app should display the default "no
+    message" alert.
+
+    Requires authentication.
+
+    Returns status 400 on error and no data
+    """
     # unauthenticated requests should be denied automatically - test this
     good, response = check_params(['to', 'message'], request.data)
     if not good:
@@ -138,9 +255,12 @@ def send_alert(request: Request) -> Response:
         logger.info('Firebase Admin app already initialized')
 
     at_least_one_success: bool = False
+    alert_id = time.time()
     for token in tokens:
         message = messaging.Message(
             data={
+                'action': 'alert',
+                'alert_id': alert_id,
                 'alert_to': request.data['to'],
                 'alert_from': request.user.username,
                 'alert_message': request.data['message']
@@ -160,6 +280,20 @@ def send_alert(request: Request) -> Response:
     if not at_least_one_success:
         return Response(build_response(False, f"Unable to send message"), status=400)
     return Response(build_response(True, "Successfully sent message"), status=200)
+
+
+@api_view(['POST'])
+def alert_read(request: Request) -> Response:
+    """
+    Sends a signal to dismiss an alert on all of the user's other devices.
+
+    Requires `alert_id` and `fcm_token` parameters to be set.
+
+    Requires authentication.
+
+    Returns no data.
+    """
+    pass  # TODO
 
 
 def check_params(expected: list, holder: Dict) -> Tuple[bool, Response]:
