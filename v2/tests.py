@@ -82,6 +82,7 @@ class APIV2TestSuite(TestCase):
         user2 = User.objects.get(username='user2')
         user3 = User.objects.get(username='user3')
         user4 = User.objects.get(username='user4')
+        user5 = User.objects.get(username='user5')
         self.assertEqual(user1.first_name, '')
         self.assertEqual(user1.last_name, '')
         self.assertEqual(user1.email, '')
@@ -93,7 +94,10 @@ class APIV2TestSuite(TestCase):
         self.assertEqual(user3.email, '')
         self.assertEqual(user4.first_name, 'john')
         self.assertEqual(user4.last_name, 'dohn')
-        self.assertEqual(user4.email, 'valid_email@example.com')
+        self.assertEqual(user4.email, '')
+        self.assertEqual(user5.first_name, 'sean')
+        self.assertEqual(user5.last_name, 'bean')
+        self.assertEqual(user5.email, 'valid_email@example.com')
 
     def test_add_user_weird(self):
         """
