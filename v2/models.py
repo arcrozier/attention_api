@@ -17,7 +17,7 @@ class Friend(models.Model):
 
 
 class FCMTokens(models.Model):
-    username = models.ForeignKey(to=User, on_delete=models.CASCADE)
+    user = models.ForeignKey(to=User, on_delete=models.CASCADE)
     fcm_token = models.TextField()
 
     class Meta:

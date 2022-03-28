@@ -9,6 +9,7 @@ from django.db import transaction, IntegrityError
 from django.db.models import QuerySet
 from firebase_admin import messaging
 from firebase_admin.exceptions import InvalidArgumentError
+from rest_framework.authtoken.models import Token
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
@@ -38,7 +39,7 @@ def register_device(request: Request) -> Response:
         return response
 
     try:
-        FCMTokens.objects.create(username=request.user.username, fcm_token=request.data['fcm_token'])
+        FCMTokens.objects.create(user=request.user, fcm_token=request.data['fcm_token'])
     except IntegrityError:
         return Response(build_response(False, 'That token is already registered'), status=400)
     return Response(build_response(True, 'Token successfully registered'), status=200)
@@ -90,7 +91,7 @@ def add_friend(request: Request) -> Response:
         return response
 
     try:
-        Friend.objects.update_or_create(owner_id=request.user.username, friend_id=request.data[
+        Friend.objects.update_or_create(owner=request.user.username, friend=request.data[
             'username'], defaults={'deleted': False})
         return Response(build_response(True, 'Successfully added/restored friend'), 200)
     except IntegrityError:
@@ -118,8 +119,8 @@ def get_friend_name(request: Request) -> Response:
 
     try:
         friend: User = User.objects.get(username=request.query_params['username'])
-        return Response(build_response(True, 'Got name', {'first_name': friend.first_name, 'last_name':
-            friend.last_name}), status=200)
+        return Response(build_response(True, 'Got name', {'first_name': friend.first_name,
+                                                          'last_name': friend.last_name}), status=200)
     except User.DoesNotExist:
         return Response(build_response(False, "Couldn't find user"), status=400)
 
@@ -140,7 +141,7 @@ def delete_friend(request: Request) -> Response:
         return response
 
     try:
-        friend = Friend.objects.get(owner_id=request.user.username, friend_id=request.data['friend'])
+        friend = Friend.objects.get(owner=request.user.username, friend=request.data['friend'])
         friend.deleted = True
         friend.save()
         return Response(build_response(True, 'Successfully deleted friend'), status=200)
@@ -182,6 +183,7 @@ def edit_user(request: Request) -> Response:
         user.last_name = request.data['last_name']
     if 'password' in request.data:
         user.set_password(request.data['password'])
+        Token.objects.get(user.username).delete()
     user.save()
     return Response(build_response(True, 'User updated successfully'), status=200)
 
@@ -250,8 +252,8 @@ def send_alert(request: Request) -> Response:
         return Response(build_response(False, f'Could not send message as {to} does not have you as a friend'),
                         status=403)
 
-    tokens: QuerySet = FCMTokens.objects.filter(username=to)
-    if len(tokens) == 0:
+    tokens: QuerySet = FCMTokens.objects.filter(user__username=to)
+    if not bool(tokens):
         return Response(build_response(False, f'Could not find user {to}'), status=400)
     try:
         firebase_admin.initialize_app()
@@ -301,10 +303,10 @@ def alert_read(request: Request) -> Response:
     if not good:
         return response
 
-    tokens: QuerySet = FCMTokens.objects.filter(username=request.data['from']).exclude(fcm_token=request.data[
-        'fcm_token']).union(FCMTokens.objects.filter(username=request.user.username))
+    tokens: QuerySet = FCMTokens.objects.filter(user__username=request.data['from']).exclude(fcm_token=request.data[
+        'fcm_token']).union(FCMTokens.objects.filter(user__username=request.user.username))
 
-    if len(tokens) == 0:
+    if not bool(tokens):
         logger.warning("Could not find tokens for recipient or the users other devices")
         return Response(build_response(False, f'An error occurred'), status=500)
     try:

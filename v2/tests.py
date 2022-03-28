@@ -1,24 +1,15 @@
-import base64
-import json
 import random
 from typing import Final
 
-from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.primitives import serialization, hashes
-from cryptography.hazmat.primitives.asymmetric import ec
-from django.core.exceptions import ObjectDoesNotExist
+from django.contrib.auth.models import User
 from django.test import Client
 from django.test import TestCase
-
-from django.contrib.auth.models import User
 from rest_framework.authtoken.models import Token
 
 from v2.models import FCMTokens, Friend
 from v2.views import check_params
 
-
 # Create your tests here.
-# TODO check that missing parameters cause failure (for all endpoints)
 
 auth_required_post_endpoints = ['send_alert', 'register_device', 'add_friend', 'alert_read']
 auth_required_get_endpoints = ['get_name', 'get_info']
@@ -31,7 +22,7 @@ class APIV2TestSuite(TestCase):
     def setUp(self):
         User.objects.create_user(username='user1', password='my_password')
         User.objects.create_user(username='user2', password='my_password2', first_name='will', last_name='smith')
-        Friend.objects.create(owner_id='user2', friend_id='user1', sent=3)
+        Friend.objects.create(owner__username='user2', friend__username='user1', sent=3)
         self.token = Token.objects.create(user='user1')
         self.token2 = Token.objects.create(user='user2')
 
@@ -45,21 +36,100 @@ class APIV2TestSuite(TestCase):
         c = Client()
         self.assertEqual(User.objects.count(), 2)
         response = c.post('/v2/register_user/', {'username': 'user3', 'password': 'my_password3', 'first_name':
-            'joe', 'last_name': 'blow'})
+                                                 'joe', 'last_name': 'blow'})
         self.assertContains(response, '')
         self.assertEqual(User.objects.count(), 3)
         user1 = User.objects.get(username='user1')
         user2 = User.objects.get(username='user2')
         user3 = User.objects.get(username='user3')
+        self.assertEqual(user1.first_name, '')
+        self.assertEqual(user1.last_name, '')
+        self.assertEqual(user1.email, '')
+        self.assertEqual(user2.first_name, '')
+        self.assertEqual(user2.last_name, '')
+        self.assertEqual(user2.email, '')
+        self.assertEqual(user3.first_name, 'joe')
+        self.assertEqual(user3.last_name, 'blow')
+        self.assertEqual(user3.email, '')
 
         response = c.post('/v2/register_user/', {'username': 'user4', 'password': 'my_password4', 'first_name':
-            'john', 'last_name': 'dohn'})
+                                                 'john', 'last_name': 'dohn'})
         self.assertContains(response, '')
         self.assertEqual(User.objects.count(), 4)
         user1 = User.objects.get(username='user1')
         user2 = User.objects.get(username='user2')
         user3 = User.objects.get(username='user3')
         user4 = User.objects.get(username='user4')
+        self.assertEqual(user1.first_name, '')
+        self.assertEqual(user1.last_name, '')
+        self.assertEqual(user1.email, '')
+        self.assertEqual(user2.first_name, '')
+        self.assertEqual(user2.last_name, '')
+        self.assertEqual(user2.email, '')
+        self.assertEqual(user3.first_name, 'joe')
+        self.assertEqual(user3.last_name, 'blow')
+        self.assertEqual(user3.email, '')
+        self.assertEqual(user4.first_name, 'john')
+        self.assertEqual(user4.last_name, 'dohn')
+        self.assertEqual(user4.email, '')
+
+        response = c.post('/v2/register_user/', {'username': 'user5', 'password': 'my_password5', 'first_name':
+                                                 'sean', 'last_name': 'bean', 'email': 'valid_email@example.com'})
+        self.assertContains(response, '')
+        self.assertEqual(User.objects.count(), 4)
+        user1 = User.objects.get(username='user1')
+        user2 = User.objects.get(username='user2')
+        user3 = User.objects.get(username='user3')
+        user4 = User.objects.get(username='user4')
+        self.assertEqual(user1.first_name, '')
+        self.assertEqual(user1.last_name, '')
+        self.assertEqual(user1.email, '')
+        self.assertEqual(user2.first_name, '')
+        self.assertEqual(user2.last_name, '')
+        self.assertEqual(user2.email, '')
+        self.assertEqual(user3.first_name, 'joe')
+        self.assertEqual(user3.last_name, 'blow')
+        self.assertEqual(user3.email, '')
+        self.assertEqual(user4.first_name, 'john')
+        self.assertEqual(user4.last_name, 'dohn')
+        self.assertEqual(user4.email, 'valid_email@example.com')
+
+    def test_add_user_weird(self):
+        """
+        Test malformed requests (missing required parameters, too many parameters, etc.)
+        """
+        c = Client()
+        response = c.post('/v2/register_user/', {'username': 'user2', 'password': 'my_password3',
+                                                 'first_name': 'joe', 'last_name': 'blow'})
+        self.assertContains(response, '', status_code=400)
+        self.assertEqual(User.objects.get(username='user2').first_name, 'will')
+        self.assertEqual(User.objects.get(username='user2').last_name, 'smith')
+
+        response = c.post('/v2/register_user/', {'username': 'user3', 'password': 'my_password3',
+                                                 'first_name': 'joe', 'last_name': 'blow', 'email': 'invalid_email'})
+        self.assertContains(response, '', status_code=400)
+        self.assertFalse(User.objects.filter(username='user3').exists())
+
+        response = c.post('/v2/register_user/', {'username': 'user3', 'password': 'my_password3',
+                                                 'first_name': 'joe', 'last_name': 'blow',
+                                                 'email': 'invalid_email@gmail'})
+        self.assertContains(response, '', status_code=400)
+        self.assertFalse(User.objects.filter(username='user3').exists())
+
+        response = c.post('/v2/register_user/', {'username': 'user3',
+                                                 'first_name': 'joe', 'last_name': 'blow',
+                                                 'email': 'valid_email@gmail.com'})
+        self.assertContains(response, '', status_code=400)
+        self.assertFalse(User.objects.filter(username='user3').exists())
+
+        response = c.put('/v2/register_user/', {'id': 'user1', 'token': 'Updated2'},
+                         content_type='application/json')
+        self.assertContains(response, '', status_code=404)
+        response = c.post('/v2/register_user/')
+        self.assertContains(response, '', status_code=400)
+        response = c.get('v2/register_user/', {'username': 'user3', 'password': 'my_password3',
+                                               'first_name': 'joe', 'last_name': 'blow'})
+        self.assertContains(response, '', status_code=404)
 
     def test_register_device(self):
         c = Client()
@@ -67,7 +137,7 @@ class APIV2TestSuite(TestCase):
         self.assertContains(response, '', 401)
         response = c.post('/v2/register_device/', {'fcm_token': 'fake token'}, HTTP_AUTHORIZATION=f'Token {self.token}')
         self.assertContains(response, '', 200)
-        self.assertEqual(FCMTokens.objects.get(username='user1'), 'fake_token')
+        self.assertEqual(FCMTokens.objects.get(username='user1').fcm_token, 'fake_token')
         response = c.post('/v2/register_device/', {'fcm_token': 'fake token'}, HTTP_AUTHORIZATION=f'Token {self.token}')
         self.assertContains(response, '', 400)
         self.assertEqual(FCMTokens.objects.get(username='user1'), 'fake token')
@@ -77,52 +147,80 @@ class APIV2TestSuite(TestCase):
         c = Client()
         response = c.post('/v2/add_friend/', {'username': 'user2'}, HTTP_AUTHORIZATION=f'Token {self.token}')
         self.assertContains(response, '', 200)
-        friend: Friend = Friend.objects.get(owner_id='user1', friend_id='user2')
+        friend: Friend = Friend.objects.get(owner__username='user1', friend__username='user2')
         self.assertEqual(friend,
-                         Friend(owner_id='user1', friend_id='user2', sent=0, received=0, deleted=False))
+                         Friend(owner__username='user1', friend__username='user2', sent=0, received=0, deleted=False))
         friend.sent = 1
         friend.received = 2
         friend.save()
         response = c.post('/v2/add_friend/', {'username': 'user2'}, HTTP_AUTHORIZATION=f'Token {self.token}')
-        friend = Friend.objects.get(owner_id='user1', friend_id='user2')
+        friend = Friend.objects.get(owner__username='user1', friend__username='user2')
         self.assertEqual(friend,
-                         Friend(owner_id='user1', friend_id='user2', sent=1, received=2, deleted=False))
+                         Friend(owner__username='user1', friend__username='user2', sent=1, received=2, deleted=False))
         friend.deleted = True
         friend.save()
         response = c.post('/v2/add_friend/', {'username': 'user2'}, HTTP_AUTHORIZATION=f'Token {self.token}')
-        friend = Friend.objects.get(owner_id='user1', friend_id='user2')
+        self.assertContains(response, '', 200)
+        friend = Friend.objects.get(owner__username='user1', friend__username='user2')
         self.assertEqual(friend,
-                         Friend(owner_id='user1', friend_id='user2', sent=1, received=2, deleted=False))
+                         Friend(owner__username='user1', friend__username='user2', sent=1, received=2, deleted=False))
 
-    def test_add_user_weird(self):
-        """
-        Test malformed requests (missing required parameters, too many parameters, etc.)
-        """
-        c = Client()
-        response = c.post('/v2/register_user/', {'username': 'user2', 'password': 'my_password3', 'first_name':
-            'joe', 'last_name': 'blow'})
-        self.assertContains(response, '', status_code=400)
-        self.assertEqual(User.objects.get(username='user2').first_name, 'will')
-        self.assertEqual(User.objects.get(username='user2').last_name, 'smith')
-        response = c.put('/v2/register_user/', {'id': 'user1', 'token': 'Updated2'},
-                         content_type='application/json')
-        self.assertContains(response, '', status_code=404)
-        response = c.post('/v2/register_user/')
-        self.assertContains(response, '', status_code=400)
-        response = c.get('v2/register_user/', {'username': 'user3', 'password': 'my_password3', 'first_name':
-            'joe', 'last_name': 'blow'})
-        self.assertContains(response, '', status_code=404)
+        # Check that user1 adding user4 as a friend does not add user1 as a friend of user4
+        # i.e. user1 -> user4, but user4 !-> user1
+        User.objects.create_user(username='user4', password='my_password4', first_name='will', last_name='smith')
+        response = c.post('/v2/add_friend/', {'username': 'user4'}, HTTP_AUTHORIZATION=f'Token {self.token}')
+        self.assertContains(response, '', 200)
+        friend: Friend = Friend.objects.get(owner__username='user1', friend__username='user4')
+        self.assertEqual(friend,
+                         Friend(owner__username='user1', friend__username='user4', sent=0, received=0, deleted=False))
+        self.assertFalse(Friend.objects.filter(owner__username='user4', friend__username='user1').exists())
+
+        # Try to add a user that doesn't exist
+        response = c.post('/v2/add_friend/', {'username': 'user_does_not_exist'}, 
+                          HTTP_AUTHORIZATION=f'Token {self.token}')
+        self.assertContains(response, '', 400)
+        self.assertFalse(
+            Friend.objects.filter(owner__username='user1', friend__username='user_does_not_exist').exists())
+
+        response = c.post('/v2/add_friend/', HTTP_AUTHORIZATION=f'Token {self.token}')
+        self.assertContains(response, '', 400)
+        self.assertEqual(Friend.objects.filter(owner__username='user1').count(), 1)
 
     def test_get_friend_name(self):
         c = Client()
         response = c.get('/v2/get_name/', {'username': 'user2'}, HTTP_AUTHORIZATION=f'Token {self.token}')
+        self.assertContains(response, '', status_code=200)
         self.assertEqual(response.data, {'first_name': 'will', 'last_name': 'smith'})
+        response = c.get('/v2/get_name/', HTTP_AUTHORIZATION=f'Token {self.token}')
+        self.assertContains(response, '', status_code=400)
+        response = c.get('/v2/get_name/', {'not_username': 'user2'}, HTTP_AUTHORIZATION=f'Token {self.token}')
+        self.assertContains(response, '', status_code=400)
+        response = c.get('/v2/get_name/', {'username': 'user_does_not_exist'}, HTTP_AUTHORIZATION=f'Token {self.token}')
+        self.assertContains(response, '', status_code=400)
 
     def test_delete_friend(self):
         c = Client()
+        User.objects.create_user(username='user4', password='my_password4', first_name='will', last_name='smith')
         response = c.get('/v2/delete_friend/', {'friend': 'user2'}, HTTP_AUTHORIZATION=f'Token {self.token2}')
         self.assertContains(response, '', status_code=200)
-        Friend.objects.get(owner_id='user1', friend_id='user2', sent=2, received=0, deleted=True)
+        friend = Friend.objects.get(owner__username='user1', friend__username='user2', sent=2, received=0, deleted=True)
+
+        # User 4 is not friends with us (or vice versa)
+        response = c.get('/v2/delete_friend/', {'friend': 'user4'}, HTTP_AUTHORIZATION=f'Token {self.token2}')
+        self.assertContains(response, '', status_code=400)
+        self.assertFalse(Friend.objects.filter(owner__username='user1', friend__username='user4').exists())
+
+        # User does not exist
+        response = c.get('/v2/delete_friend/', {'friend': 'user_does_not_exist'},
+                         HTTP_AUTHORIZATION=f'Token {self.token2}')
+        self.assertContains(response, '', status_code=400)
+        self.assertFalse(Friend.objects.filter(owner__username='user1',
+                                               friend__username='user_does_not_exist').exists())
+
+        friend.deleted = False
+        response = c.get('/v2/delete_friend/', HTTP_AUTHORIZATION=f'Token {self.token2}')
+        self.assertContains(response, '', status_code=400)
+        Friend.objects.get(owner__username='user1', friend__username='user2', sent=2, received=0, deleted=False)
 
     def test_edit_user(self):
         c = Client()
@@ -147,9 +245,22 @@ class APIV2TestSuite(TestCase):
         self.assertNotEqual(User.objects.get(username='user1').password, password)
         self.assertNotEqual(User.objects.get(username='user1').password, 'password')
 
-    def test_auth_required(self):
-        # TODO - go through all methods and ensure they fail when: no token is provided, an incorrect token is provided
-        pass
+        password = User.objects.get(username='user1').password
+        response = c.put('/v2/edit/', {'last_name': 'last', 'first_name': 'first', 'password': 'new_pass'},
+                         HTTP_AUTHORIZATION=f'Token {self.token}',
+                         content_type='application/json')
+        self.assertContains(response, '', status_code=200)
+        self.assertEqual(User.objects.get(username='user1').first_name, 'first')
+        self.assertEqual(User.objects.get(username='user1').last_name, 'last')
+        self.assertNotEqual(User.objects.get(username='user1').password, password)
+        self.assertNotEqual(User.objects.get(username='user1').password, 'new_pass')
+
+        response = c.put('/v2/edit/',
+                         HTTP_AUTHORIZATION=f'Token {self.token}',
+                         content_type='application/json')
+        self.assertContains(response, '', status_code=200)
+        self.assertEqual(User.objects.get(username='user1').first_name, 'first')
+        self.assertEqual(User.objects.get(username='user1').last_name, 'last')
 
     def test_send_alert(self):
         """
@@ -177,6 +288,8 @@ class APIV2TestSuite(TestCase):
         # This should fail because it doesn't expect GET requests
         response = c.get('/v2/send_alert/', {'to': 'user2', 'message': 'hi'}, HTTP_AUTHORIZATION=f'Token {self.token}')
         self.assertContains(response, '', status_code=405)
+        response = c.post('/v2/send_alert/', {'message': 'hi'}, HTTP_AUTHORIZATION=f'Token {self.token}')
+        self.assertContains(response, '', status_code=400)
 
     def test_check_params_simple(self):
         """
@@ -280,7 +393,8 @@ class APIV2TestSuite(TestCase):
 
             response = c.get(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
             self.assertContains(response, '', status_code=405)
-            response = c.put(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            response = c.put(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken',
+                             content_type='application/json')
             self.assertContains(response, '', status_code=405)
             response = c.delete(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
             self.assertContains(response, '', status_code=405)
@@ -295,7 +409,8 @@ class APIV2TestSuite(TestCase):
 
             response = c.post(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
             self.assertContains(response, '', status_code=405)
-            response = c.put(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            response = c.put(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken',
+                             content_type='application/json')
             self.assertContains(response, '', status_code=405)
             response = c.delete(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
             self.assertContains(response, '', status_code=405)
@@ -310,7 +425,8 @@ class APIV2TestSuite(TestCase):
 
             response = c.get(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
             self.assertContains(response, '', status_code=405)
-            response = c.put(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            response = c.put(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken',
+                             content_type='application/json')
             self.assertContains(response, '', status_code=405)
             response = c.post(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
             self.assertContains(response, '', status_code=405)
@@ -318,9 +434,10 @@ class APIV2TestSuite(TestCase):
             self.assertContains(response, '', status_code=405)
 
         for endpoint in auth_required_put_endpoints:
-            response = c.put(f'/v2/{endpoint}/')
+            response = c.put(f'/v2/{endpoint}/', content_type='application/json')
             self.assertContains(response, '', status_code=401)
-            response = c.put(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            response = c.put(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken',
+                             content_type='application/json')
             self.assertContains(response, '', status_code=403)
 
             response = c.get(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
@@ -334,37 +451,12 @@ class APIV2TestSuite(TestCase):
 
     def test_api_integration(self):
 
-        # TODO delete
-        def sign(inner_challenge: str, inner_private_key):
-            # key = serialization.load_der_private_key(base64.b64decode(inner_private_key), password=None)
-            return base64.urlsafe_b64encode(inner_private_key.sign(inner_challenge.encode(), ec.ECDSA(hashes.SHA256(
-
-            )))).decode()
-
-        # TODO update parameters
-        def test_alerts(status: int):
-            for inner_private_key, inner_challenge in users:
-                inner_response = c.post('/v2/send_alert/', {'to': base64_public_key(random.choice(users)[0]),
-                                                            'from': base64_public_key(inner_private_key),
-                                                            'message': random.choice(('HI!! ', '')),
-                                                            'signature': sign(inner_challenge, inner_private_key),
-                                                            'challenge': inner_challenge})
-                self.assertContains(inner_response, '', status_code=status)
-
-        # TODO replace with getting tokens
-        def get_challenges():
+        def get_tokens():
             for inner_user in users:
-                inner_response = c.get(f'/v2/get_challenge/{base64_public_key(inner_user[0])}/')
+                inner_response = c.post(f'/v2/api_token_auth/', {'username': inner_user[0], 'password': inner_user[1]})
                 self.assertContains(inner_response, '', status_code=200)
                 inner_response_json = inner_response.data
-                inner_user[1] = inner_response_json['data']
-
-        # TODO delete
-        def base64_public_key(inner_private_key):
-            return base64.urlsafe_b64encode(inner_private_key.public_key().public_bytes(
-                encoding=serialization.Encoding.DER,
-                format=serialization.PublicFormat.SubjectPublicKeyInfo
-            )).decode()
+                inner_user[4] = inner_response_json['data']['token']
 
         c = Client()
         num_users: Final = 100
@@ -373,43 +465,51 @@ class APIV2TestSuite(TestCase):
         users: list[list] = []
         # Generate some users
         for x in range(num_users):
-            # TODO replace this with registering users
-            private_key = ec.generate_private_key(ec.SECP256R1())
-            assert [private_key, None] not in users
-            users.append([private_key, None])
-            response = c.post('/v2/post_id/', {'id': base64_public_key(users[x][0]), 'token': f'fake{x}'})
+            users.append([f'test_user_{x}', f'test_password_{x}', f'test_first_name_{x}', f'test_last_name_{x}', None])
+            response = c.post('/v2/register_user/', {'username': users[x][0], 'password': users[x][1],
+                                                     'first_name': users[x][2], 'last_name': users[x][3]})
             self.assertContains(response, '', status_code=200)
 
         # Get challenges for the users
-        get_challenges()
+        get_tokens()
 
-        # Update the users with the new challenges
-        for private_key, challenge in users:
-            # TODO replace with updating some user parameter - name or something
-            public_key = base64_public_key(private_key)
-            response = c.post('/v2/post_id/', {'id': public_key, 'token': f'fake{public_key}',
-                                               'challenge': challenge, 'signature': sign(challenge, private_key)})
+        # Update the users with the new tokens
+        for username, password, first_name, last_name, token in users:
+            response = c.put('/v2/edit/', {'first_name': first_name + 'update'}, content_type='application/json',
+                             HTTP_AUTHORIZATION=f'Token {token}')
             self.assertContains(response, '', status_code=200)
 
-        # Try mixed up parameters
-        for private_key, challenge in users:
-            # TODO update parameters
-            response = c.post('/v2/send_alert/', {'to': base64_public_key(random.choice(users)[0]),
-                                                  'from': base64_public_key(private_key),
-                                                  'message': random.choice(('HI!! ', '')),
-                                                  'signature': challenge,
-                                                  'challenge': sign(challenge, private_key)})
+        # Check that it still works
+        for username, password, first_name, last_name, token in users:
+            response = c.get('/v2/get_info/', HTTP_AUTHORIZATION=f'Token {token}')
+            self.assertContains(response, '', status_code=200)
+
+        # Change passwords
+        for x in range(len(users)):
+            token = users[x][4]
+            users[x][1] += 'updated'
+            response = c.put('/v2/edit/', {'password': users[x][1]}, HTTP_AUTHORIZATION=f'Token {token}',
+                             content_type='application/json')
+            self.assertContains(response, '', status_code=200)
+
+        # Token should no longer be valid
+        for username, password, first_name, last_name, token in users:
+            response = c.post('/v2/register_device/', {'fcm_token': 'fake_token'}, HTTP_AUTHORIZATION=f'Token {token}')
             self.assertContains(response, '', status_code=403)
 
-        # Try missing parameters
-        for private_key, challenge in users:
-            # TODO update parameters
-            sample_dict = {'to': base64_public_key(random.choice(users)[0]),
-                           'from': base64_public_key(private_key),
-                           'message': random.choice(('HI!! ', '')),
-                           'signature': sign(challenge, private_key),
-                           'challenge': challenge}
-            selected_keys = random.sample(list(sample_dict), random.randint(0, len(sample_dict) - 1))
-            selected_params = {key: sample_dict[key] for key in selected_keys}
-            response = c.post('/v2/send_alert/', selected_params)
-            self.assertContains(response, '', status_code=400)
+        get_tokens()
+
+        # Tokens should work now
+        for username, password, first_name, last_name, token in users:
+            response = c.post('/v2/add_friend/', {'username': random.choice(users)[0]},
+                              HTTP_AUTHORIZATION=f'Token {token}')
+            self.assertContains(response, '', status_code=200)
+
+        for username, password, first_name, last_name, token in users:
+            response = c.delete('/v2/delete_user_data/',
+                                HTTP_AUTHORIZATION=f'Token {token}')
+            self.assertContains(response, '', status_code=200)
+            self.assertFalse(User.objects.filter(username=username).exists())
+            self.assertFalse(Friend.objects.filter(owner__username=username).exists())
+            self.assertFalse(Friend.objects.filter(friend__username=username).exists())
+            self.assertFalse(Token.objects.filter(user__username=username).exists())
