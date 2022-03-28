@@ -2,6 +2,7 @@ import random
 from typing import Final
 
 from django.contrib.auth.models import User
+from django.db import models
 from django.test import Client
 from django.test import TestCase
 from rest_framework.authtoken.models import Token
@@ -20,11 +21,11 @@ auth_required_put_endpoints = ['edit']
 class APIV2TestSuite(TestCase):
 
     def setUp(self):
-        user1 = User.objects.create_user(username='user1', password='my_password')
-        user2 = User.objects.create_user(username='user2', password='my_password2', first_name='will', last_name='smith')
-        Friend.objects.create(owner=user2, friend=user1, sent=3)
-        self.token1 = Token.objects.create(user=user1)
-        self.token2 = Token.objects.create(user=user2)
+        self.user1 = User.objects.create_user(username='user1', password='my_password')
+        self.user2 = User.objects.create_user(username='user2', password='my_password2', first_name='will', last_name='smith')
+        Friend.objects.create(owner=self.user2, friend=self.user1, sent=3)
+        self.token1 = Token.objects.create(user=self.user1)
+        self.token2 = Token.objects.create(user=self.user2)
 
     def test_add_user_simple(self):
         """
@@ -148,43 +149,46 @@ class APIV2TestSuite(TestCase):
         response = c.post('/v2/add_friend/', {'username': 'user2'}, HTTP_AUTHORIZATION=f'Token {self.token1}')
         self.assertContains(response, '', status_code=200)
         friend: Friend = Friend.objects.get(owner__username='user1', friend__username='user2')
-        self.assertEqual(friend,
-                         Friend(owner__username='user1', friend__username='user2', sent=0, received=0, deleted=False))
+        self.assertFriendEqual(friend,
+                               Friend(pk=friend.pk, owner=self.user1, friend=self.user2, sent=0, received=0,
+                                      deleted=False))
         friend.sent = 1
         friend.received = 2
         friend.save()
         response = c.post('/v2/add_friend/', {'username': 'user2'}, HTTP_AUTHORIZATION=f'Token {self.token1}')
         friend = Friend.objects.get(owner__username='user1', friend__username='user2')
-        self.assertEqual(friend,
-                         Friend(owner__username='user1', friend__username='user2', sent=1, received=2, deleted=False))
+        self.assertFriendEqual(friend,
+                               Friend(pk=friend.pk, owner=self.user1, friend=self.user2, sent=1, received=2,
+                                      deleted=False))
         friend.deleted = True
         friend.save()
         response = c.post('/v2/add_friend/', {'username': 'user2'}, HTTP_AUTHORIZATION=f'Token {self.token1}')
         self.assertContains(response, '', status_code=200)
         friend = Friend.objects.get(owner__username='user1', friend__username='user2')
         self.assertEqual(friend,
-                         Friend(owner__username='user1', friend__username='user2', sent=1, received=2, deleted=False))
+                         Friend(pk=friend.pk, owner=self.user1, friend=self.user2, sent=1, received=2, deleted=False))
 
         # Check that user1 adding user4 as a friend does not add user1 as a friend of user4
         # i.e. user1 -> user4, but user4 !-> user1
-        User.objects.create_user(username='user4', password='my_password4', first_name='will', last_name='smith')
+        user4 = User.objects.create_user(username='user4', password='my_password4', first_name='will',
+                                         last_name='smith')
         response = c.post('/v2/add_friend/', {'username': 'user4'}, HTTP_AUTHORIZATION=f'Token {self.token1}')
         self.assertContains(response, '', status_code=200)
-        friend: Friend = Friend.objects.get(owner__username='user1', friend__username='user4')
+        friend: Friend = Friend.objects.get(owner='user1', friend='user4')
         self.assertEqual(friend,
-                         Friend(owner__username='user1', friend__username='user4', sent=0, received=0, deleted=False))
-        self.assertFalse(Friend.objects.filter(owner__username='user4', friend__username='user1').exists())
+                         Friend(owner=self.user1, friend=user4, sent=0, received=0, deleted=False))
+        self.assertFalse(Friend.objects.filter(owner='user4', friend='user1').exists())
 
         # Try to add a user that doesn't exist
         response = c.post('/v2/add_friend/', {'username': 'user_does_not_exist'},
                           HTTP_AUTHORIZATION=f'Token {self.token1}')
         self.assertContains(response, '', status_code=400)
         self.assertFalse(
-            Friend.objects.filter(owner__username='user1', friend__username='user_does_not_exist').exists())
+            Friend.objects.filter(owner='user1', friend__username='user_does_not_exist').exists())
 
         response = c.post('/v2/add_friend/', HTTP_AUTHORIZATION=f'Token {self.token1}')
         self.assertContains(response, '', status_code=400)
-        self.assertEqual(Friend.objects.filter(owner__username='user1').count(), 1)
+        self.assertEqual(Friend.objects.filter(owner='user1').count(), 1)
 
     def test_get_friend_name(self):
         c = Client()
@@ -392,14 +396,14 @@ class APIV2TestSuite(TestCase):
             response = c.post(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
             self.assertContains(response, '', status_code=403)
 
-            response = c.get(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            response = c.get(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token {self.token1}')
             self.assertContains(response, '', status_code=405)
-            response = c.put(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken',
+            response = c.put(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token {self.token1}',
                              content_type='application/json')
             self.assertContains(response, '', status_code=405)
-            response = c.delete(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            response = c.delete(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token {self.token1}')
             self.assertContains(response, '', status_code=405)
-            response = c.patch(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            response = c.patch(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token {self.token1}')
             self.assertContains(response, '', status_code=405)
 
         for endpoint in auth_required_get_endpoints:
@@ -408,14 +412,14 @@ class APIV2TestSuite(TestCase):
             response = c.get(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
             self.assertContains(response, '', status_code=403)
 
-            response = c.post(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            response = c.post(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token {self.token1}')
             self.assertContains(response, '', status_code=405)
-            response = c.put(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken',
+            response = c.put(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token {self.token1}',
                              content_type='application/json')
             self.assertContains(response, '', status_code=405)
-            response = c.delete(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            response = c.delete(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token {self.token1}')
             self.assertContains(response, '', status_code=405)
-            response = c.patch(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            response = c.patch(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token {self.token1}')
             self.assertContains(response, '', status_code=405)
 
         for endpoint in auth_required_delete_endpoints:
@@ -424,14 +428,14 @@ class APIV2TestSuite(TestCase):
             response = c.delete(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
             self.assertContains(response, '', status_code=403)
 
-            response = c.get(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            response = c.get(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token {self.token1}')
             self.assertContains(response, '', status_code=405)
-            response = c.put(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken',
+            response = c.put(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token {self.token1}',
                              content_type='application/json')
             self.assertContains(response, '', status_code=405)
-            response = c.post(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            response = c.post(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token {self.token1}')
             self.assertContains(response, '', status_code=405)
-            response = c.patch(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            response = c.patch(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token {self.token1}')
             self.assertContains(response, '', status_code=405)
 
         for endpoint in auth_required_put_endpoints:
@@ -441,13 +445,13 @@ class APIV2TestSuite(TestCase):
                              content_type='application/json')
             self.assertContains(response, '', status_code=403)
 
-            response = c.get(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            response = c.get(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token {self.token1}')
             self.assertContains(response, '', status_code=405)
-            response = c.post(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            response = c.post(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token {self.token1}')
             self.assertContains(response, '', status_code=405)
-            response = c.delete(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            response = c.delete(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token {self.token1}')
             self.assertContains(response, '', status_code=405)
-            response = c.patch(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
+            response = c.patch(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token {self.token1}')
             self.assertContains(response, '', status_code=405)
 
     def test_api_integration(self):
@@ -514,3 +518,10 @@ class APIV2TestSuite(TestCase):
             self.assertFalse(Friend.objects.filter(owner__username=username).exists())
             self.assertFalse(Friend.objects.filter(friend__username=username).exists())
             self.assertFalse(Token.objects.filter(user__username=username).exists())
+
+    def assertFriendEqual(self, expected: Friend, actual: Friend):
+        self.assertEqual(expected.owner, actual.owner)
+        self.assertEqual(expected.friend, actual.friend)
+        self.assertEqual(expected.sent, actual.sent)
+        self.assertEqual(expected.received, actual.received)
+        self.assertEqual(expected.deleted, actual.deleted)
