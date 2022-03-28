@@ -91,11 +91,13 @@ def add_friend(request: Request) -> Response:
         return response
 
     try:
-        Friend.objects.update_or_create(owner=request.user.username, friend=request.data[
-            'username'], defaults={'deleted': False})
-        return Response(build_response(True, 'Successfully added/restored friend'), 200)
+        Friend.objects.update_or_create(owner=request.user, friend=User.objects.get(username=request.data[
+            'username']), defaults={'deleted': False})
+        return Response(build_response(True, 'Successfully added/restored friend'), status=200)
     except IntegrityError:
-        return Response(build_response(False, 'An error occurred when restoring friend'), 400)
+        return Response(build_response(False, 'An error occurred when restoring friend'), status=400)
+    except User.DoesNotExist:
+        return Response(build_response(False, 'User does not exist'), status=400)
 
 
 @api_view(['GET', 'HEAD'])
@@ -213,7 +215,7 @@ def get_user_info(request: Request) -> Response:
     }
     """
     user: User = request.user
-    friends = [FriendSerializer(x) for x in Friend.objects.filter(owner_id=user.username)]
+    friends = [FriendSerializer(x) for x in Friend.objects.filter(owner=user)]
     data = {
         'first_name': user.first_name,
         'last_name': user.last_name,
