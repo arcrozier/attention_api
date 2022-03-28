@@ -172,7 +172,7 @@ def edit_user(request: Request) -> Response:
     """
     PUT: Updates the corresponding fields for the authenticated user.
 
-    Has 3 optional parameters: `first_name`, `last_name`, and `password`.
+    Has 4 optional parameters: `first_name`, `last_name`, `email`, and `password`.
 
     Requires authentication.
 
@@ -183,9 +183,11 @@ def edit_user(request: Request) -> Response:
         user.first_name = request.data['first_name']
     if 'last_name' in request.data:
         user.last_name = request.data['last_name']
+    if 'email' in request.data:
+        user.email = request.data['email']
     if 'password' in request.data:
         user.set_password(request.data['password'])
-        Token.objects.get(user.username).delete()
+        Token.objects.get(user=user).delete()
     user.save()
     return Response(build_response(True, 'User updated successfully'), status=200)
 
