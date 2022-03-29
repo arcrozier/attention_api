@@ -5,6 +5,8 @@ from typing import Any, Tuple, Dict
 
 import firebase_admin
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 from django.db import transaction, IntegrityError
 from django.db.models import QuerySet
 from firebase_admin import messaging
@@ -66,11 +68,16 @@ def register_user(request: Request) -> Response:
         return response
 
     try:
-        User.objects.create_user(first_name=request.data['first_name'], last_name=request.data['last_name'],
-                                 username=request.data['username'], password=request.data['password'],
-                                 email=request.data.get('email'))
+        if 'email' in request.data:
+            validate_email(request.data.get('email'))
+        with transaction.atomic():
+            User.objects.create_user(first_name=request.data['first_name'], last_name=request.data['last_name'],
+                                     username=request.data['username'], password=request.data['password'],
+                                     email=request.data.get('email'))
     except IntegrityError:
         return Response(build_response(False, 'Username taken'), status=400)
+    except ValidationError:
+        return Response(build_response(False, 'Invalid email address'), status=400)
     return Response(build_response(True, 'User created'), status=200)
 
 

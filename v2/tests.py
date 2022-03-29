@@ -129,12 +129,12 @@ class APIV2TestSuite(TestCase):
 
         response = c.put('/v2/register_user/', {'id': 'user1', 'token': 'Updated2'},
                          content_type='application/json')
-        self.assertContains(response, '', status_code=404)
+        self.assertContains(response, '', status_code=405)
         response = c.post('/v2/register_user/')
         self.assertContains(response, '', status_code=400)
-        response = c.get('v2/register_user/', {'username': 'user3', 'password': 'my_password3',
-                                               'first_name': 'joe', 'last_name': 'blow'})
-        self.assertContains(response, '', status_code=404)
+        response = c.get('/v2/register_user/', {'username': 'user3', 'password': 'my_password3',
+                                                'first_name': 'joe', 'last_name': 'blow'})
+        self.assertContains(response, '', status_code=405)
 
     def test_register_device(self):
         c = Client()
