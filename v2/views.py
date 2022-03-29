@@ -41,7 +41,8 @@ def register_device(request: Request) -> Response:
         return response
 
     try:
-        FCMTokens.objects.create(user=request.user, fcm_token=request.data['fcm_token'])
+        with transaction.atomic():
+            FCMTokens.objects.create(user=request.user, fcm_token=request.data['fcm_token'])
     except IntegrityError:
         return Response(build_response(False, 'That token is already registered'), status=400)
     return Response(build_response(True, 'Token successfully registered'), status=200)
@@ -150,9 +151,10 @@ def delete_friend(request: Request) -> Response:
         return response
 
     try:
-        friend = Friend.objects.get(owner=request.user.username, friend=request.data['friend'])
-        friend.deleted = True
-        friend.save()
+        with transaction.atomic():
+            friend = Friend.objects.select_for_update().get(owner=request.user, friend__username=request.data['friend'])
+            friend.deleted = True
+            friend.save()
         return Response(build_response(True, 'Successfully deleted friend'), status=200)
     except Friend.DoesNotExist:
         return Response(build_response(False, 'Could not delete friend as you were not friends'), status=400)
@@ -185,18 +187,30 @@ def edit_user(request: Request) -> Response:
 
     Returns no data.
     """
+    updated = True
+    invalid_field = []
     user = request.user
     if 'first_name' in request.data:
         user.first_name = request.data['first_name']
     if 'last_name' in request.data:
         user.last_name = request.data['last_name']
     if 'email' in request.data:
-        user.email = request.data['email']
-    if 'password' in request.data:
+        try:
+            validate_email(request.data['email'])
+            user.email = request.data['email']
+        except ValidationError:
+            updated = False
+            invalid_field.append('email')
+            logger.info('Invalid email provided to update')
+    if 'password' in request.data and updated:  # this check needs to come last
         user.set_password(request.data['password'])
         Token.objects.get(user=user).delete()
-    user.save()
-    return Response(build_response(True, 'User updated successfully'), status=200)
+    if updated:
+        user.save()
+        return Response(build_response(True, 'User updated successfully'), status=200)
+    if not updated:
+        return Response(build_response(False, f'Could not update user: invalid value for {",".join(invalid_field)}'),
+                        status=400)
 
 
 @api_view(['GET', 'HEAD'])
@@ -258,7 +272,13 @@ def send_alert(request: Request) -> Response:
     to: str = request.data['to']
 
     try:
-        Friend.objects.get(owner__username=to, friend__username=request.user.username, deleted=False)
+        friend = Friend.objects.get(owner__username=to, friend__username=request.user.username, deleted=False)
+        friend.received += 1
+        friend.save()
+        friend, created = Friend.objects.get_or_create(owner__username=request.user.username, friend__username=to,
+                                                       defaults={'deleted': True})
+        friend.sent += 1
+        friend.save()
     except Friend.DoesNotExist:
         return Response(build_response(False, f'Could not send message as {to} does not have you as a friend'),
                         status=403)

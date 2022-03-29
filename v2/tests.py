@@ -2,7 +2,6 @@ import random
 from typing import Final
 
 from django.contrib.auth.models import User
-from django.db import models
 from django.test import Client
 from django.test import TestCase
 from rest_framework.authtoken.models import Token
@@ -22,7 +21,8 @@ class APIV2TestSuite(TestCase):
 
     def setUp(self):
         self.user1 = User.objects.create_user(username='user1', password='my_password')
-        self.user2 = User.objects.create_user(username='user2', password='my_password2', first_name='will', last_name='smith')
+        self.user2 = User.objects.create_user(username='user2', password='my_password2', first_name='will',
+                                              last_name='smith')
         Friend.objects.create(owner=self.user2, friend=self.user1, sent=3)
         self.token1 = Token.objects.create(user=self.user1)
         self.token2 = Token.objects.create(user=self.user2)
@@ -37,7 +37,7 @@ class APIV2TestSuite(TestCase):
         c = Client()
         self.assertEqual(User.objects.count(), 2)
         response = c.post('/v2/register_user/', {'username': 'user3', 'password': 'my_password3', 'first_name':
-                                                 'joe', 'last_name': 'blow'})
+            'joe', 'last_name': 'blow'})
         self.assertContains(response, '')
         self.assertEqual(User.objects.count(), 3)
         user1 = User.objects.get(username='user1')
@@ -54,7 +54,7 @@ class APIV2TestSuite(TestCase):
         self.assertEqual(user3.email, '')
 
         response = c.post('/v2/register_user/', {'username': 'user4', 'password': 'my_password4', 'first_name':
-                                                 'john', 'last_name': 'dohn'})
+            'john', 'last_name': 'dohn'})
         self.assertContains(response, '')
         self.assertEqual(User.objects.count(), 4)
         user1 = User.objects.get(username='user1')
@@ -75,7 +75,7 @@ class APIV2TestSuite(TestCase):
         self.assertEqual(user4.email, '')
 
         response = c.post('/v2/register_user/', {'username': 'user5', 'password': 'my_password5', 'first_name':
-                                                 'sean', 'last_name': 'bean', 'email': 'valid_email@example.com'})
+            'sean', 'last_name': 'bean', 'email': 'valid_email@example.com'})
         self.assertContains(response, '')
         self.assertEqual(User.objects.count(), 5)
         user1 = User.objects.get(username='user1')
@@ -140,12 +140,14 @@ class APIV2TestSuite(TestCase):
         c = Client()
         response = c.post('/v2/register_device/', {'fcm_token': 'fake token'})
         self.assertContains(response, '', status_code=403)
-        response = c.post('/v2/register_device/', {'fcm_token': 'fake token'}, HTTP_AUTHORIZATION=f'Token {self.token1}')
+        response = c.post('/v2/register_device/', {'fcm_token': 'fake token'},
+                          HTTP_AUTHORIZATION=f'Token {self.token1}')
         self.assertContains(response, '', status_code=200)
-        self.assertEqual(FCMTokens.objects.get(username='user1').fcm_token, 'fake_token')
-        response = c.post('/v2/register_device/', {'fcm_token': 'fake token'}, HTTP_AUTHORIZATION=f'Token {self.token1}')
+        self.assertEqual(FCMTokens.objects.get(user__username='user1').fcm_token, 'fake token')
+        response = c.post('/v2/register_device/', {'fcm_token': 'fake token'},
+                          HTTP_AUTHORIZATION=f'Token {self.token1}')
         self.assertContains(response, '', status_code=400)
-        self.assertEqual(FCMTokens.objects.get(username='user1').fcm_token, 'fake token')
+        self.assertEqual(FCMTokens.objects.get(user__username='user1').fcm_token, 'fake token')
 
     def test_add_friend(self):
         # Test undeleting a friend doesn't reset sent/received fields
@@ -205,33 +207,37 @@ class APIV2TestSuite(TestCase):
         self.assertContains(response, '', status_code=400)
         response = c.get('/v2/get_name/', {'not_username': 'user2'}, HTTP_AUTHORIZATION=f'Token {self.token1}')
         self.assertContains(response, '', status_code=400)
-        response = c.get('/v2/get_name/', {'username': 'user_does_not_exist'}, HTTP_AUTHORIZATION=f'Token {self.token1}')
+        response = c.get('/v2/get_name/', {'username': 'user_does_not_exist'},
+                         HTTP_AUTHORIZATION=f'Token {self.token1}')
         self.assertContains(response, '', status_code=400)
 
     def test_delete_friend(self):
         c = Client()
         User.objects.create_user(username='user4', password='my_password4', first_name='will', last_name='smith')
-        response = c.delete('/v2/delete_friend/', {'friend': 'user2'}, HTTP_AUTHORIZATION=f'Token {self.token2}',
+        response = c.delete('/v2/delete_friend/', {'friend': 'user1'}, HTTP_AUTHORIZATION=f'Token {self.token2}',
                             content_type='application/json')
         self.assertContains(response, '', status_code=200)
-        friend = Friend.objects.get(owner__username='user1', friend__username='user2', sent=2, received=0, deleted=True)
+        friend = Friend.objects.get(owner__username='user2', friend__username='user1', sent=3, received=0, deleted=True)
 
         # User 4 is not friends with us (or vice versa)
-        response = c.delete('/v2/delete_friend/', {'friend': 'user4'}, HTTP_AUTHORIZATION=f'Token {self.token2}')
+        response = c.delete('/v2/delete_friend/', {'friend': 'user4'}, HTTP_AUTHORIZATION=f'Token {self.token2}',
+                            content_type='application/json')
         self.assertContains(response, '', status_code=400)
         self.assertFalse(Friend.objects.filter(owner__username='user1', friend__username='user4').exists())
 
         # User does not exist
         response = c.delete('/v2/delete_friend/', {'friend': 'user_does_not_exist'},
-                         HTTP_AUTHORIZATION=f'Token {self.token2}')
+                            HTTP_AUTHORIZATION=f'Token {self.token2}', content_type='application/json')
         self.assertContains(response, '', status_code=400)
         self.assertFalse(Friend.objects.filter(owner__username='user1',
                                                friend__username='user_does_not_exist').exists())
 
         friend.deleted = False
-        response = c.get('/v2/delete_friend/', HTTP_AUTHORIZATION=f'Token {self.token2}')
+        friend.save()
+        response = c.delete('/v2/delete_friend/', HTTP_AUTHORIZATION=f'Token {self.token2}',
+                            content_type='application/json')
         self.assertContains(response, '', status_code=400)
-        Friend.objects.get(owner__username='user1', friend__username='user2', sent=2, received=0, deleted=False)
+        Friend.objects.get(owner__username='user2', friend__username='user1', sent=3, received=0, deleted=False)
 
     def test_edit_user(self):
         c = Client()
@@ -256,6 +262,35 @@ class APIV2TestSuite(TestCase):
         self.assertNotEqual(User.objects.get(username='user1').password, password)
         self.assertNotEqual(User.objects.get(username='user1').password, 'password')
         self.token1 = Token.objects.create(user=self.user1)
+
+        response = c.put('/v2/edit/', {'email': 'valid@example.com'}, HTTP_AUTHORIZATION=f'Token {self.token1}',
+                         content_type='application/json')
+        self.assertContains(response, '', status_code=200)
+        self.assertEqual(User.objects.get(username='user1').first_name, 'aaron')
+        self.assertEqual(User.objects.get(username='user1').last_name, 'adams')
+        self.assertNotEqual(User.objects.get(username='user1').password, password)
+        self.assertNotEqual(User.objects.get(username='user1').password, 'password')
+        self.assertEqual(User.objects.get(username='user1').email, 'valid@example.com')
+
+        response = c.put('/v2/edit/', {'email': 'in valid@example.com'}, HTTP_AUTHORIZATION=f'Token {self.token1}',
+                         content_type='application/json')
+        self.assertContains(response, '', status_code=400)
+        self.assertEqual(User.objects.get(username='user1').first_name, 'aaron')
+        self.assertEqual(User.objects.get(username='user1').last_name, 'adams')
+        self.assertNotEqual(User.objects.get(username='user1').password, password)
+        self.assertNotEqual(User.objects.get(username='user1').password, 'password')
+        self.assertEqual(User.objects.get(username='user1').email, 'valid@example.com')
+
+        response = c.put('/v2/edit/', {'last_name': 'last', 'first_name': 'first', 'password': 'new_pass',
+                                       'email': 'invalid'},
+                         HTTP_AUTHORIZATION=f'Token {self.token1}',
+                         content_type='application/json')
+        self.assertContains(response, '', status_code=400)
+        self.assertEqual(User.objects.get(username='user1').first_name, 'aaron')
+        self.assertEqual(User.objects.get(username='user1').last_name, 'adams')
+        self.assertNotEqual(User.objects.get(username='user1').password, password)
+        self.assertNotEqual(User.objects.get(username='user1').password, 'password')
+        self.assertEqual(User.objects.get(username='user1').email, 'valid@example.com')
 
         password = User.objects.get(username='user1').password
         response = c.put('/v2/edit/', {'last_name': 'last', 'first_name': 'first', 'password': 'new_pass'},
@@ -416,7 +451,7 @@ class APIV2TestSuite(TestCase):
 
         for endpoint in auth_required_get_endpoints:
             response = c.get(f'/v2/{endpoint}/')
-            self.assertContains(response, '', status_code=401)
+            self.assertContains(response, '', status_code=403)
             response = c.get(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
             self.assertContains(response, '', status_code=403)
 
@@ -432,7 +467,7 @@ class APIV2TestSuite(TestCase):
 
         for endpoint in auth_required_delete_endpoints:
             response = c.delete(f'/v2/{endpoint}/')
-            self.assertContains(response, '', status_code=401)
+            self.assertContains(response, '', status_code=403)
             response = c.delete(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken')
             self.assertContains(response, '', status_code=403)
 
@@ -448,7 +483,7 @@ class APIV2TestSuite(TestCase):
 
         for endpoint in auth_required_put_endpoints:
             response = c.put(f'/v2/{endpoint}/', content_type='application/json')
-            self.assertContains(response, '', status_code=401)
+            self.assertContains(response, '', status_code=403)
             response = c.put(f'/v2/{endpoint}/', HTTP_AUTHORIZATION=f'Token notavalidtoken',
                              content_type='application/json')
             self.assertContains(response, '', status_code=403)
@@ -472,7 +507,7 @@ class APIV2TestSuite(TestCase):
                 inner_user[4] = inner_response_json['token']
 
         c = Client()
-        num_users: Final = 100
+        num_users: Final = 50
 
         # Stores the users that are available - each element should be [private key, challenge]
         users: list[list] = []
