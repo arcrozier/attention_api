@@ -30,6 +30,8 @@ DB_NAME = 'attention'
 DB_USER = os.getenv('ATTENTION_API_DB_USER', 'NOT FOUND')
 DB_PASS = os.getenv('ATTENTION_API_DB_PASS', 'NOT FOUND')
 
+AUTH_USER_MODEL = 'auth.User'
+
 
 # Application definition
 INSTALLED_APPS = [

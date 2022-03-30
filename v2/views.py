@@ -4,7 +4,9 @@ import time
 from typing import Any, Tuple, Dict
 
 import firebase_admin
+from django.contrib.auth import get_user_model
 from django.contrib.auth.models import User
+from django.contrib.auth.validators import ASCIIUsernameValidator
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db import transaction, IntegrityError
@@ -73,18 +75,16 @@ def register_user(request: Request) -> Response:
         if 'email' in request.data:
             validate_email(request.data.get('email'))
         with transaction.atomic():
-            user = User.objects.create_user(first_name=request.data['first_name'], last_name=request.data['last_name'],
-                                            username=request.data['username'], password=request.data['password'],
-                                            email=request.data.get('email'))
-            if user.username_validator.code == 'invalid':
-                raise ValueError('Invalid username')
+            ASCIIUsernameValidator()(request.data['username'])
+            get_user_model().objects.create_user(first_name=request.data['first_name'],
+                                                 last_name=request.data['last_name'],
+                                                 username=request.data['username'],
+                                                 password=request.data['password'],
+                                                 email=request.data.get('email'))
     except IntegrityError:
         return Response(build_response(False, 'Username taken'), status=400)
-    except ValidationError:
-        return Response(build_response(False, 'Invalid email address'), status=400)
-    except ValueError:
-        return Response(build_response(False, f'Invalid username: {user.username_validator.message}'),
-                        status=400)
+    except ValidationError as e:
+        return Response(build_response(False, e.message), status=400)
     return Response(build_response(True, 'User created'), status=200)
 
 
@@ -105,12 +105,12 @@ def add_friend(request: Request) -> Response:
         return response
 
     try:
-        Friend.objects.update_or_create(owner=request.user, friend=User.objects.get(username=request.data[
+        Friend.objects.update_or_create(owner=request.user, friend=get_user_model().objects.get(username=request.data[
             'username']), defaults={'deleted': False})
         return Response(build_response(True, 'Successfully added/restored friend'), status=200)
     except IntegrityError:
         return Response(build_response(False, 'An error occurred when restoring friend'), status=400)
-    except User.DoesNotExist:
+    except get_user_model().DoesNotExist:
         return Response(build_response(False, 'User does not exist'), status=400)
 
 
@@ -134,10 +134,10 @@ def get_friend_name(request: Request) -> Response:
         return response
 
     try:
-        friend: User = User.objects.get(username=request.query_params['username'])
+        friend = get_user_model().objects.get(username=request.query_params['username'])
         return Response(build_response(True, 'Got name', {'first_name': friend.first_name,
                                                           'last_name': friend.last_name}), status=200)
-    except User.DoesNotExist:
+    except get_user_model().DoesNotExist:
         return Response(build_response(False, "Couldn't find user"), status=400)
 
 
@@ -178,7 +178,7 @@ def delete_user_data(request: Request) -> Response:
 
     Returns no data.
     """
-    User.objects.get(username=request.user.username).delete()
+    get_user_model().objects.get(username=request.user.username).delete()
     return Response(build_response(True, 'Successfully deleted user data'), status=200)
 
 
@@ -243,7 +243,7 @@ def get_user_info(request: Request) -> Response:
         ]
     }
     """
-    user: User = request.user
+    user = request.user
     friends = [FriendSerializer(x) for x in Friend.objects.filter(owner=user)]
     data = {
         'first_name': user.first_name,

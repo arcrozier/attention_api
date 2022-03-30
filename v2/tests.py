@@ -1,7 +1,9 @@
 import random
 from typing import Final
 
+from django.contrib.auth import get_user_model
 from django.contrib.auth.models import User
+from django.contrib.auth.validators import ASCIIUsernameValidator
 from django.test import Client
 from django.test import TestCase
 from rest_framework.authtoken.models import Token
@@ -20,9 +22,9 @@ auth_required_put_endpoints = ['edit']
 class APIV2TestSuite(TestCase):
 
     def setUp(self):
-        self.user1 = User.objects.create_user(username='user1', password='my_password')
-        self.user2 = User.objects.create_user(username='user2', password='my_password2', first_name='will',
-                                              last_name='smith')
+        self.user1 = get_user_model().objects.create_user(username='user1', password='my_password')
+        self.user2 = get_user_model().objects.create_user(username='user2', password='my_password2', first_name='will',
+                                                          last_name='smith')
         Friend.objects.create(owner=self.user2, friend=self.user1, sent=3)
         self.token1 = Token.objects.create(user=self.user1)
         self.token2 = Token.objects.create(user=self.user2)
@@ -35,14 +37,14 @@ class APIV2TestSuite(TestCase):
         Check status codes
         """
         c = Client()
-        self.assertEqual(User.objects.count(), 2)
+        self.assertEqual(get_user_model().objects.count(), 2)
         response = c.post('/v2/register_user/', {'username': 'user3', 'password': 'my_password3', 'first_name':
             'joe', 'last_name': 'blow'})
         self.assertContains(response, '')
-        self.assertEqual(User.objects.count(), 3)
-        user1 = User.objects.get(username='user1')
-        user2 = User.objects.get(username='user2')
-        user3 = User.objects.get(username='user3')
+        self.assertEqual(get_user_model().objects.count(), 3)
+        user1 = get_user_model().objects.get(username='user1')
+        user2 = get_user_model().objects.get(username='user2')
+        user3 = get_user_model().objects.get(username='user3')
         self.assertEqual(user1.first_name, '')
         self.assertEqual(user1.last_name, '')
         self.assertEqual(user1.email, '')
@@ -56,11 +58,11 @@ class APIV2TestSuite(TestCase):
         response = c.post('/v2/register_user/', {'username': 'user4', 'password': 'my_password4', 'first_name':
             'john', 'last_name': 'dohn'})
         self.assertContains(response, '')
-        self.assertEqual(User.objects.count(), 4)
-        user1 = User.objects.get(username='user1')
-        user2 = User.objects.get(username='user2')
-        user3 = User.objects.get(username='user3')
-        user4 = User.objects.get(username='user4')
+        self.assertEqual(get_user_model().objects.count(), 4)
+        user1 = get_user_model().objects.get(username='user1')
+        user2 = get_user_model().objects.get(username='user2')
+        user3 = get_user_model().objects.get(username='user3')
+        user4 = get_user_model().objects.get(username='user4')
         self.assertEqual(user1.first_name, '')
         self.assertEqual(user1.last_name, '')
         self.assertEqual(user1.email, '')
@@ -77,12 +79,12 @@ class APIV2TestSuite(TestCase):
         response = c.post('/v2/register_user/', {'username': 'user5', 'password': 'my_password5', 'first_name':
             'sean', 'last_name': 'bean', 'email': 'valid_email@example.com'})
         self.assertContains(response, '')
-        self.assertEqual(User.objects.count(), 5)
-        user1 = User.objects.get(username='user1')
-        user2 = User.objects.get(username='user2')
-        user3 = User.objects.get(username='user3')
-        user4 = User.objects.get(username='user4')
-        user5 = User.objects.get(username='user5')
+        self.assertEqual(get_user_model().objects.count(), 5)
+        user1 = get_user_model().objects.get(username='user1')
+        user2 = get_user_model().objects.get(username='user2')
+        user3 = get_user_model().objects.get(username='user3')
+        user4 = get_user_model().objects.get(username='user4')
+        user5 = get_user_model().objects.get(username='user5')
         self.assertEqual(user1.first_name, '')
         self.assertEqual(user1.last_name, '')
         self.assertEqual(user1.email, '')
@@ -107,37 +109,39 @@ class APIV2TestSuite(TestCase):
         response = c.post('/v2/register_user/', {'username': 'user2', 'password': 'my_password3',
                                                  'first_name': 'joe', 'last_name': 'blow'})
         self.assertContains(response, '', status_code=400)
-        self.assertEqual(User.objects.get(username='user2').first_name, 'will')
-        self.assertEqual(User.objects.get(username='user2').last_name, 'smith')
+        self.assertEqual(get_user_model().objects.get(username='user2').first_name, 'will')
+        self.assertEqual(get_user_model().objects.get(username='user2').last_name, 'smith')
 
         response = c.post('/v2/register_user/', {'username': 'user3', 'password': 'my_password3',
                                                  'first_name': 'joe', 'last_name': 'blow', 'email': 'invalid_email'})
         self.assertContains(response, '', status_code=400)
-        self.assertFalse(User.objects.filter(username='user3').exists())
+        self.assertFalse(get_user_model().objects.filter(username='user3').exists())
 
         response = c.post('/v2/register_user/', {'username': 'user3', 'password': 'my_password3',
                                                  'first_name': 'joe', 'last_name': 'blow',
                                                  'email': 'invalid_email@gmail'})
         self.assertContains(response, '', status_code=400)
-        self.assertFalse(User.objects.filter(username='user3').exists())
+        self.assertFalse(get_user_model().objects.filter(username='user3').exists())
 
         response = c.post('/v2/register_user/', {'username': 'user3',
                                                  'first_name': 'joe', 'last_name': 'blow',
                                                  'email': 'valid_email@gmail.com'})
         self.assertContains(response, '', status_code=400)
-        self.assertFalse(User.objects.filter(username='user3').exists())
+        self.assertFalse(get_user_model().objects.filter(username='user3').exists())
 
         response = c.post('/v2/register_user/', {'username': 'user3',
                                                  'first_name': 'joe', 'last_name': 'blow', 'password': '6chars',
                                                  'email': 'valid_email@gmail.com'})
         self.assertContains(response, '', status_code=400)
-        self.assertFalse(User.objects.filter(username='user3').exists())
+        self.assertFalse(get_user_model().objects.filter(username='user3').exists())
 
-        response = c.post('/v2/register_user/', {'username': 'invalid]user',
+        # self.assertFalse(ASCIIUsernameValidator()('invalid] 😃user'))
+
+        response = c.post('/v2/register_user/', {'username': 'invalid] 😃user',
                                                  'first_name': 'joe', 'last_name': 'blow', 'password': 'good_password',
                                                  'email': 'valid_email@gmail.com'})
-        # self.assertContains(response, '', status_code=400)
-        self.assertFalse(User.objects.filter(username='invalid]user').exists())
+        self.assertContains(response, '', status_code=400)
+        self.assertFalse(get_user_model().objects.filter(username='invalid] 😃user').exists())
 
         response = c.put('/v2/register_user/', {'id': 'user1', 'token': 'Updated2'},
                          content_type='application/json')
@@ -189,7 +193,7 @@ class APIV2TestSuite(TestCase):
 
         # Check that user1 adding user4 as a friend does not add user1 as a friend of user4
         # i.e. user1 -> user4, but user4 !-> user1
-        user4 = User.objects.create_user(username='user4', password='my_password4', first_name='will',
+        user4 = get_user_model().objects.create_user(username='user4', password='my_password4', first_name='will',
                                          last_name='smith')
         response = c.post('/v2/add_friend/', {'username': 'user4'}, HTTP_AUTHORIZATION=f'Token {self.token1}')
         self.assertContains(response, '', status_code=200)
@@ -225,7 +229,7 @@ class APIV2TestSuite(TestCase):
 
     def test_delete_friend(self):
         c = Client()
-        User.objects.create_user(username='user4', password='my_password4', first_name='will', last_name='smith')
+        get_user_model().objects.create_user(username='user4', password='my_password4', first_name='will', last_name='smith')
         response = c.delete('/v2/delete_friend/', {'friend': 'user1'}, HTTP_AUTHORIZATION=f'Token {self.token2}',
                             content_type='application/json')
         self.assertContains(response, '', status_code=200)
@@ -256,71 +260,71 @@ class APIV2TestSuite(TestCase):
         response = c.put('/v2/edit/', {'first_name': 'aaron'}, HTTP_AUTHORIZATION=f'Token {self.token1}',
                          content_type='application/json')
         self.assertContains(response, '', status_code=200)
-        self.assertEqual(User.objects.get(username='user1').first_name, 'aaron')
-        self.assertEqual(User.objects.get(username='user1').last_name, '')
+        self.assertEqual(get_user_model().objects.get(username='user1').first_name, 'aaron')
+        self.assertEqual(get_user_model().objects.get(username='user1').last_name, '')
 
         response = c.put('/v2/edit/', {'last_name': 'adams'}, HTTP_AUTHORIZATION=f'Token {self.token1}',
                          content_type='application/json')
         self.assertContains(response, '', status_code=200)
-        self.assertEqual(User.objects.get(username='user1').first_name, 'aaron')
-        self.assertEqual(User.objects.get(username='user1').last_name, 'adams')
+        self.assertEqual(get_user_model().objects.get(username='user1').first_name, 'aaron')
+        self.assertEqual(get_user_model().objects.get(username='user1').last_name, 'adams')
 
-        password = User.objects.get(username='user1').password
+        password = get_user_model().objects.get(username='user1').password
         response = c.put('/v2/edit/', {'password': 'password'}, HTTP_AUTHORIZATION=f'Token {self.token1}',
                          content_type='application/json')
         self.assertContains(response, '', status_code=200)
-        self.assertEqual(User.objects.get(username='user1').first_name, 'aaron')
-        self.assertEqual(User.objects.get(username='user1').last_name, 'adams')
-        self.assertNotEqual(User.objects.get(username='user1').password, password)
-        self.assertNotEqual(User.objects.get(username='user1').password, 'password')
+        self.assertEqual(get_user_model().objects.get(username='user1').first_name, 'aaron')
+        self.assertEqual(get_user_model().objects.get(username='user1').last_name, 'adams')
+        self.assertNotEqual(get_user_model().objects.get(username='user1').password, password)
+        self.assertNotEqual(get_user_model().objects.get(username='user1').password, 'password')
         self.token1 = Token.objects.create(user=self.user1)
 
         response = c.put('/v2/edit/', {'email': 'valid@example.com'}, HTTP_AUTHORIZATION=f'Token {self.token1}',
                          content_type='application/json')
         self.assertContains(response, '', status_code=200)
-        self.assertEqual(User.objects.get(username='user1').first_name, 'aaron')
-        self.assertEqual(User.objects.get(username='user1').last_name, 'adams')
-        self.assertNotEqual(User.objects.get(username='user1').password, password)
-        self.assertNotEqual(User.objects.get(username='user1').password, 'password')
-        self.assertEqual(User.objects.get(username='user1').email, 'valid@example.com')
+        self.assertEqual(get_user_model().objects.get(username='user1').first_name, 'aaron')
+        self.assertEqual(get_user_model().objects.get(username='user1').last_name, 'adams')
+        self.assertNotEqual(get_user_model().objects.get(username='user1').password, password)
+        self.assertNotEqual(get_user_model().objects.get(username='user1').password, 'password')
+        self.assertEqual(get_user_model().objects.get(username='user1').email, 'valid@example.com')
 
         response = c.put('/v2/edit/', {'email': 'in valid@example.com'}, HTTP_AUTHORIZATION=f'Token {self.token1}',
                          content_type='application/json')
         self.assertContains(response, '', status_code=400)
-        self.assertEqual(User.objects.get(username='user1').first_name, 'aaron')
-        self.assertEqual(User.objects.get(username='user1').last_name, 'adams')
-        self.assertNotEqual(User.objects.get(username='user1').password, password)
-        self.assertNotEqual(User.objects.get(username='user1').password, 'password')
-        self.assertEqual(User.objects.get(username='user1').email, 'valid@example.com')
+        self.assertEqual(get_user_model().objects.get(username='user1').first_name, 'aaron')
+        self.assertEqual(get_user_model().objects.get(username='user1').last_name, 'adams')
+        self.assertNotEqual(get_user_model().objects.get(username='user1').password, password)
+        self.assertNotEqual(get_user_model().objects.get(username='user1').password, 'password')
+        self.assertEqual(get_user_model().objects.get(username='user1').email, 'valid@example.com')
 
         response = c.put('/v2/edit/', {'last_name': 'last', 'first_name': 'first', 'password': 'new_pass',
                                        'email': 'invalid'},
                          HTTP_AUTHORIZATION=f'Token {self.token1}',
                          content_type='application/json')
         self.assertContains(response, '', status_code=400)
-        self.assertEqual(User.objects.get(username='user1').first_name, 'aaron')
-        self.assertEqual(User.objects.get(username='user1').last_name, 'adams')
-        self.assertNotEqual(User.objects.get(username='user1').password, password)
-        self.assertNotEqual(User.objects.get(username='user1').password, 'password')
-        self.assertEqual(User.objects.get(username='user1').email, 'valid@example.com')
+        self.assertEqual(get_user_model().objects.get(username='user1').first_name, 'aaron')
+        self.assertEqual(get_user_model().objects.get(username='user1').last_name, 'adams')
+        self.assertNotEqual(get_user_model().objects.get(username='user1').password, password)
+        self.assertNotEqual(get_user_model().objects.get(username='user1').password, 'password')
+        self.assertEqual(get_user_model().objects.get(username='user1').email, 'valid@example.com')
 
-        password = User.objects.get(username='user1').password
+        password = get_user_model().objects.get(username='user1').password
         response = c.put('/v2/edit/', {'last_name': 'last', 'first_name': 'first', 'password': 'new_pass'},
                          HTTP_AUTHORIZATION=f'Token {self.token1}',
                          content_type='application/json')
         self.assertContains(response, '', status_code=200)
-        self.assertEqual(User.objects.get(username='user1').first_name, 'first')
-        self.assertEqual(User.objects.get(username='user1').last_name, 'last')
-        self.assertNotEqual(User.objects.get(username='user1').password, password)
-        self.assertNotEqual(User.objects.get(username='user1').password, 'new_pass')
+        self.assertEqual(get_user_model().objects.get(username='user1').first_name, 'first')
+        self.assertEqual(get_user_model().objects.get(username='user1').last_name, 'last')
+        self.assertNotEqual(get_user_model().objects.get(username='user1').password, password)
+        self.assertNotEqual(get_user_model().objects.get(username='user1').password, 'new_pass')
         self.token1 = Token.objects.create(user=self.user1)
 
         response = c.put('/v2/edit/',
                          HTTP_AUTHORIZATION=f'Token {self.token1}',
                          content_type='application/json')
         self.assertContains(response, '', status_code=200)
-        self.assertEqual(User.objects.get(username='user1').first_name, 'first')
-        self.assertEqual(User.objects.get(username='user1').last_name, 'last')
+        self.assertEqual(get_user_model().objects.get(username='user1').first_name, 'first')
+        self.assertEqual(get_user_model().objects.get(username='user1').last_name, 'last')
 
     def test_send_alert(self):
         """
@@ -569,7 +573,7 @@ class APIV2TestSuite(TestCase):
             response = c.delete('/v2/delete_user_data/',
                                 HTTP_AUTHORIZATION=f'Token {token}')
             self.assertContains(response, '', status_code=200)
-            self.assertFalse(User.objects.filter(username=username).exists())
+            self.assertFalse(get_user_model().objects.filter(username=username).exists())
             self.assertFalse(Friend.objects.filter(owner__username=username).exists())
             self.assertFalse(Friend.objects.filter(friend__username=username).exists())
             self.assertFalse(Token.objects.filter(user__username=username).exists())
