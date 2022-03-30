@@ -77,12 +77,14 @@ def register_user(request: Request) -> Response:
                                             username=request.data['username'], password=request.data['password'],
                                             email=request.data.get('email'))
             if user.username_validator.code == 'invalid':
-                return Response(build_response(False, f'Invalid username: {user.username_validator.message}'),
-                                status=400)
+                raise ValueError('Invalid username')
     except IntegrityError:
         return Response(build_response(False, 'Username taken'), status=400)
     except ValidationError:
         return Response(build_response(False, 'Invalid email address'), status=400)
+    except ValueError:
+        return Response(build_response(False, f'Invalid username: {user.username_validator.message}'),
+                        status=400)
     return Response(build_response(True, 'User created'), status=200)
 
 
