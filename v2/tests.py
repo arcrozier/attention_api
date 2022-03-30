@@ -135,8 +135,6 @@ class APIV2TestSuite(TestCase):
         self.assertContains(response, '', status_code=400)
         self.assertFalse(get_user_model().objects.filter(username='user3').exists())
 
-        # self.assertFalse(ASCIIUsernameValidator()('invalid] 😃user'))
-
         response = c.post('/v2/register_user/', {'username': 'invalid] 😃user',
                                                  'first_name': 'joe', 'last_name': 'blow', 'password': 'good_password',
                                                  'email': 'valid_email@gmail.com'})
