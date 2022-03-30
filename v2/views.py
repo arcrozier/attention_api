@@ -67,14 +67,18 @@ def register_user(request: Request) -> Response:
     good, response = check_params(['first_name', 'last_name', 'username', 'password'], request.data)
     if not good:
         return response
-
+    if len(request.data['password']) < 8:
+        return Response(build_response(False, 'Password must be at least 8 characters'), status=400)
     try:
         if 'email' in request.data:
             validate_email(request.data.get('email'))
         with transaction.atomic():
-            User.objects.create_user(first_name=request.data['first_name'], last_name=request.data['last_name'],
-                                     username=request.data['username'], password=request.data['password'],
-                                     email=request.data.get('email'))
+            user = User.objects.create_user(first_name=request.data['first_name'], last_name=request.data['last_name'],
+                                            username=request.data['username'], password=request.data['password'],
+                                            email=request.data.get('email'))
+            if user.username_validator.code == 'invalid':
+                return Response(build_response(False, f'Invalid username: {user.username_validator.message}'),
+                                status=400)
     except IntegrityError:
         return Response(build_response(False, 'Username taken'), status=400)
     except ValidationError:
