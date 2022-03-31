@@ -11,6 +11,8 @@ class Friend(models.Model):
     sent = models.IntegerField(default=0)
     received = models.IntegerField(default=0)
     deleted = models.BooleanField(default=False)
+    last_sent_message_read = models.BooleanField(default=False)
+    last_sent_alert_id = models.CharField(max_length=100, null=True)
 
     class Meta:
         constraints = [

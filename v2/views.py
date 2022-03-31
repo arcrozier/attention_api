@@ -195,7 +195,7 @@ def edit_user(request: Request) -> Response:
     """
     updated = True
     invalid_field = []
-    user = request.user
+    user = get_user_model().objects.select_for_update().get(username=request.user.username)
     if 'first_name' in request.data:
         user.first_name = request.data['first_name']
     if 'last_name' in request.data:
@@ -277,6 +277,7 @@ def send_alert(request: Request) -> Response:
 
     to: str = request.data['to']
 
+    alert_id = str(time.time())
     try:
         friend = Friend.objects.get(owner__username=to, friend__username=request.user.username, deleted=False)
         friend.received += 1
@@ -284,6 +285,8 @@ def send_alert(request: Request) -> Response:
         friend, created = Friend.objects.get_or_create(owner__username=request.user.username, friend__username=to,
                                                        defaults={'deleted': True})
         friend.sent += 1
+        friend.last_sent_alert_id = alert_id
+        friend.last_sent_message_read = False
         friend.save()
     except Friend.DoesNotExist:
         return Response(build_response(False, f'Could not send message as {to} does not have you as a friend'),
@@ -298,7 +301,6 @@ def send_alert(request: Request) -> Response:
         logger.info('Firebase Admin app already initialized')
 
     at_least_one_success: bool = False
-    alert_id = time.time()
     for token in tokens:
         message = messaging.Message(
             data={
@@ -339,6 +341,12 @@ def alert_read(request: Request) -> Response:
     good, response = check_params(['alert_id', 'from', 'fcm_token'], request.data)
     if not good:
         return response
+
+    friends_read = Friend.objects.filter(owner__username=request.data['from'],
+                                         last_sent_alert_id=request.data['alert_id'])
+    for friend in friends_read:
+        friend.last_sent_message_read = True
+        friend.save()
 
     tokens: QuerySet = FCMTokens.objects.filter(user__username=request.data['from']).exclude(fcm_token=request.data[
         'fcm_token']).union(FCMTokens.objects.filter(user__username=request.user.username))
