@@ -108,24 +108,28 @@ class APIV2TestSuite(TestCase):
         c = Client()
         response = c.post('/v2/register_user/', {'username': 'user2', 'password': 'my_password3',
                                                  'first_name': 'joe', 'last_name': 'blow'})
+        print(response.data)
         self.assertContains(response, '', status_code=400)
         self.assertEqual(get_user_model().objects.get(username='user2').first_name, 'will')
         self.assertEqual(get_user_model().objects.get(username='user2').last_name, 'smith')
 
         response = c.post('/v2/register_user/', {'username': 'user3', 'password': 'my_password3',
                                                  'first_name': 'joe', 'last_name': 'blow', 'email': 'invalid_email'})
+        print(response.data)
         self.assertContains(response, '', status_code=400)
         self.assertFalse(get_user_model().objects.filter(username='user3').exists())
 
         response = c.post('/v2/register_user/', {'username': 'user3', 'password': 'my_password3',
                                                  'first_name': 'joe', 'last_name': 'blow',
                                                  'email': 'invalid_email@gmail'})
+        print(response.data)
         self.assertContains(response, '', status_code=400)
         self.assertFalse(get_user_model().objects.filter(username='user3').exists())
 
         response = c.post('/v2/register_user/', {'username': 'user3',
                                                  'first_name': 'joe', 'last_name': 'blow',
                                                  'email': 'valid_email@gmail.com'})
+        print(response.data)
         self.assertContains(response, '', status_code=400)
         self.assertFalse(get_user_model().objects.filter(username='user3').exists())
 
@@ -138,6 +142,7 @@ class APIV2TestSuite(TestCase):
         response = c.post('/v2/register_user/', {'username': 'invalid] 😃user',
                                                  'first_name': 'joe', 'last_name': 'blow', 'password': 'good_password',
                                                  'email': 'valid_email@gmail.com'})
+        print(response.data)
         self.assertContains(response, '', status_code=400)
         self.assertFalse(get_user_model().objects.filter(username='invalid] 😃user').exists())
 
