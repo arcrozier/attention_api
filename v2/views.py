@@ -20,7 +20,6 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from v2.models import FCMTokens, Friend
-from v2.serializers import FriendSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -105,13 +104,31 @@ def add_friend(request: Request) -> Response:
         return response
 
     try:
-        Friend.objects.update_or_create(owner=request.user, friend=get_user_model().objects.get(username=request.data[
-            'username']), defaults={'deleted': False})
+        friend = get_user_model().objects.get(username=request.data['username'])
+        Friend.objects.update_or_create(owner=request.user, friend=friend, defaults={
+            'deleted': False})
         return Response(build_response(True, 'Successfully added/restored friend'), status=200)
     except IntegrityError:
         return Response(build_response(False, 'An error occurred when restoring friend'), status=400)
     except get_user_model().DoesNotExist:
         return Response(build_response(False, 'User does not exist'), status=400)
+
+
+@api_view(['PUT'])
+def edit_friend_name(request: Request) -> Response:
+    good, response = check_params(['username', 'new_name'], request.data)
+    if not good:
+        return response
+
+    try:
+        friend = get_user_model().objects.get(username=request.data['username'])
+        Friend.objects.update_or_create(owner=request.user, friend=friend, defaults={'deleted': False,
+                                                                                     'name': request.data['new_name']})
+        return Response(build_response(True, 'Successfully updated friend name'), status=200)
+    except IntegrityError:
+        return Response(build_response(False, 'An error occurred when changing friend\'s name'), status=400)
+    except get_user_model().DoesNotExist:
+        return Response(build_response(False, 'An error occurred when restoring friend'), status=400)
 
 
 @api_view(['GET', 'HEAD'])
@@ -236,15 +253,18 @@ def get_user_info(request: Request) -> Response:
             {
                 owner: <username>,
                 friend: <friend's username>,
+                name: <friend's name>,
                 sent: <number of messages sent to friend>,
-                received: <number of messages received from friend>
+                received: <number of messages received from friend>,
+                last_message_id_sent: <the last alert id that was sent to this friend>,
+                last_message_read: <whether the last message was read or not>
             },
             ...
         ]
     }
     """
     user = request.user
-    friends = [FriendSerializer(x) for x in Friend.objects.filter(owner=user)]
+    friends = [flatten_friend(x) for x in Friend.objects.filter(owner=user)]
     data = {
         'first_name': user.first_name,
         'last_name': user.last_name,
@@ -366,6 +386,7 @@ def alert_read(request: Request) -> Response:
             data={
                 'action': 'read',
                 'alert_id': alert_id,
+                'username_to': request.user.username,
             },
             android=messaging.AndroidConfig(
                 priority='low'
@@ -407,3 +428,13 @@ def build_response(success: bool, message: str, data: Any = None, string: bool =
 
 def string_response(args: dict):
     return json.dumps(args)
+
+def flatten_friend(friend: Friend):
+    return {
+        'friend': friend.friend.username,
+        'name': friend.name or f'{friend.friend.first_name} {friend.friend.last_name}',
+        'sent': friend.sent,
+        'received': friend.received,
+        'last_message_id_sent': friend.last_sent_alert_id,
+        'last_message_read': friend.last_sent_message_read,
+    }

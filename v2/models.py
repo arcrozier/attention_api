@@ -8,6 +8,7 @@ from django.db import models
 class Friend(models.Model):
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='friend_set')
     friend = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='friend_of_set')
+    name = models.CharField(max_length=150, null=True)
     sent = models.IntegerField(default=0)
     received = models.IntegerField(default=0)
     deleted = models.BooleanField(default=False)
