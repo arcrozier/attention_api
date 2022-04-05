@@ -249,9 +249,9 @@ def get_user_info(request: Request) -> Response:
     {
         first_name: <user's first name>,
         last_name: <user's last name>,
+        email: <user's email>,
         friends: [
             {
-                owner: <username>,
                 friend: <friend's username>,
                 name: <friend's name>,
                 sent: <number of messages sent to friend>,
@@ -268,6 +268,7 @@ def get_user_info(request: Request) -> Response:
     data = {
         'first_name': user.first_name,
         'last_name': user.last_name,
+        'email': user.email,
         'friends': friends,
     }
     return Response(build_response(True, 'Got user data', data=data), status=200)
