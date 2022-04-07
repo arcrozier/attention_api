@@ -142,8 +142,7 @@ def get_friend_name(request: Request) -> Response:
 
     Returns the following data:
     {
-        first_name: <user's first name>,
-        last_name: <user's last name>
+        name: <user's name>
     }
     """
     good, response = check_params(['username'], request.query_params)
@@ -152,8 +151,12 @@ def get_friend_name(request: Request) -> Response:
 
     try:
         friend = get_user_model().objects.get(username=request.query_params['username'])
-        return Response(build_response(True, 'Got name', {'first_name': friend.first_name,
-                                                          'last_name': friend.last_name}), status=200)
+        try:
+            rel = Friend.objects.get(owner=request.user, friend=friend)
+            return Response(build_response(True, 'Got name', {'name': rel.name}), status=200)
+        except Friend.DoesNotExist:
+            return Response(build_response(True, 'Got name', {'name': f'{friend.first_name} {friend.last_name}'}),
+                            status=200)
     except get_user_model().DoesNotExist:
         return Response(build_response(False, "Couldn't find user"), status=400)
 
