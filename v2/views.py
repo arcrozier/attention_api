@@ -4,7 +4,7 @@ import time
 from typing import Any, Tuple, Dict
 
 import firebase_admin
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, authenticate
 from django.contrib.auth.models import User
 from django.contrib.auth.validators import ASCIIUsernameValidator
 from django.core.exceptions import ValidationError
@@ -116,14 +116,39 @@ def add_friend(request: Request) -> Response:
 
 @api_view(['PUT'])
 def edit_friend_name(request: Request) -> Response:
+    """
+    PUT: Edits the name this user has associated with their friend
+
+    Every user can give each of their friends a custom name - only the user can see this, not the friend or anyone
+    else (think of this like giving your friend a contact name). Thus, the relationship between users can be
+    represented as a directed graph, with each user as a vertex, and friend relationships as edges between the
+    vertices. The label of each edge is the friend name, only visible to the parent of the edge.
+
+    user1 --[user1's name for user2]--> user2
+    user2 --[user2's name for user1]--> user1
+    There doesn't necessarily need to be a symmetric relationship between users: user1 ---> user2 but no edge from
+    user2 to user1
+
+    Requires `username` - this is the username of the friend - and `new_name` - this is the name to give them.
+
+    If `username` is not a friend of the authenticated user, a friend relationship is created to store the
+    information but it is marked as deleted.
+
+    Requires authentication
+
+    Returns no data
+    """
     good, response = check_params(['username', 'new_name'], request.data)
     if not good:
         return response
 
     try:
         friend = get_user_model().objects.get(username=request.data['username'])
-        Friend.objects.update_or_create(owner=request.user, friend=friend, defaults={'deleted': False,
-                                                                                     'name': request.data['new_name']})
+        rel, created = Friend.objects.update_or_create(owner=request.user, friend=friend,
+                                                       defaults={'name': request.data['new_name']})
+        if created:
+            rel.deleted = True
+            rel.save()
         return Response(build_response(True, 'Successfully updated friend name'), status=200)
     except IntegrityError:
         return Response(build_response(False, 'An error occurred when changing friend\'s name'), status=400)
@@ -192,12 +217,20 @@ def delete_user_data(request: Request) -> Response:
     DELETE: Truly deletes all data associated with the authenticated user (not lazy deletion, cannot be
     undone). Includes references to the user other people have in their friend lists, etc.
 
-    Accepts no parameters.
+    Requires `username` and `password` in addition to an authentication token.
 
     Requires authentication.
 
     Returns no data.
     """
+    good, response = check_params(['username', 'password'], request.data)
+    if not good:
+        return response
+
+    user = authenticate(username=request.data['username'], password=request.data['password'])
+    if request.user.username != request.data['username'] or user is None:
+        return Response(build_response(False, 'Forbidden'), status=403)
+
     get_user_model().objects.get(username=request.user.username).delete()
     return Response(build_response(True, 'Successfully deleted user data'), status=200)
 
@@ -207,7 +240,9 @@ def edit_user(request: Request) -> Response:
     """
     PUT: Updates the corresponding fields for the authenticated user.
 
-    Has 4 optional parameters: `first_name`, `last_name`, `email`, and `password`.
+    Has 4 optional parameters: `first_name`, `last_name`, `email`, `password`, and `old_password`. If `password` is
+    provided, `old_password` must also be provided (returning status 400 if it is not), and it should be the password
+    the user currently has - otherwise, will return status 403.
 
     Requires authentication.
 
@@ -229,8 +264,16 @@ def edit_user(request: Request) -> Response:
             invalid_field.append('email')
             logger.info('Invalid email provided to update')
     if 'password' in request.data and updated:  # this check needs to come last
-        user.set_password(request.data['password'])
-        Token.objects.get(user=user).delete()
+        if len(request.data['password']) >= 8 and 'old_password' in request.data:
+            check_pass = authenticate(username=request.user.username, password=request.data['old_password'])
+            if check_pass is not None:
+                user.set_password(request.data['password'])
+                Token.objects.get(user=user).delete()
+            else:
+                return Response(build_response(False, 'Incorrect old password'), status=403)
+        else:
+            updated = False
+            invalid_field.append('password')
     if updated:
         user.save()
         return Response(build_response(True, 'User updated successfully'), status=200)
