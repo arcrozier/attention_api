@@ -364,6 +364,7 @@ class APIV2TestSuite(TestCase):
         response = c.get('/v2/get_info/', HTTP_AUTHORIZATION=f'Token {self.token2}')
         self.assertContains(response, '', status_code=200)
         self.assertEqual({
+            'username': 'user2',
             'first_name': 'will',
             'last_name': 'smith',
             'email': 'test@sample.verify',

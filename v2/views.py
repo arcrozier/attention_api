@@ -293,6 +293,7 @@ def get_user_info(request: Request) -> Response:
 
     On success, returns the following in the data field:
     {
+        username: <user's username>,
         first_name: <user's first name>,
         last_name: <user's last name>,
         email: <user's email>,
@@ -312,6 +313,7 @@ def get_user_info(request: Request) -> Response:
     user = request.user
     friends = [flatten_friend(x) for x in Friend.objects.filter(owner=user)]
     data = {
+        'username': user.username,
         'first_name': user.first_name,
         'last_name': user.last_name,
         'email': user.email,
