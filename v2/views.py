@@ -250,33 +250,34 @@ def edit_user(request: Request) -> Response:
     """
     updated = True
     invalid_field = []
-    user = get_user_model().objects.select_for_update().get(username=request.user.username)
-    if 'first_name' in request.data:
-        user.first_name = request.data['first_name']
-    if 'last_name' in request.data:
-        user.last_name = request.data['last_name']
-    if 'email' in request.data:
-        try:
-            validate_email(request.data['email'])
-            user.email = request.data['email']
-        except ValidationError:
-            updated = False
-            invalid_field.append('email')
-            logger.info('Invalid email provided to update')
-    if 'password' in request.data and updated:  # this check needs to come last
-        if len(request.data['password']) >= 8 and 'old_password' in request.data:
-            check_pass = authenticate(username=request.user.username, password=request.data['old_password'])
-            if check_pass is not None:
-                user.set_password(request.data['password'])
-                Token.objects.get(user=user).delete()
+    with transaction.atomic():
+        user = get_user_model().objects.select_for_update().get(username=request.user.username)
+        if 'first_name' in request.data:
+            user.first_name = request.data['first_name']
+        if 'last_name' in request.data:
+            user.last_name = request.data['last_name']
+        if 'email' in request.data:
+            try:
+                validate_email(request.data['email'])
+                user.email = request.data['email']
+            except ValidationError:
+                updated = False
+                invalid_field.append('email')
+                logger.info('Invalid email provided to update')
+        if 'password' in request.data and updated:  # this check needs to come last
+            if len(request.data['password']) >= 8 and 'old_password' in request.data:
+                check_pass = authenticate(username=request.user.username, password=request.data['old_password'])
+                if check_pass is not None:
+                    user.set_password(request.data['password'])
+                    Token.objects.get(user=user).delete()
+                else:
+                    return Response(build_response(False, 'Incorrect old password'), status=403)
             else:
-                return Response(build_response(False, 'Incorrect old password'), status=403)
-        else:
-            updated = False
-            invalid_field.append('password')
-    if updated:
-        user.save()
-        return Response(build_response(True, 'User updated successfully'), status=200)
+                updated = False
+                invalid_field.append('password')
+        if updated:
+            user.save()
+            return Response(build_response(True, 'User updated successfully'), status=200)
     if not updated:
         return Response(build_response(False, f'Could not update user: invalid value for {",".join(invalid_field)}'),
                         status=400)
