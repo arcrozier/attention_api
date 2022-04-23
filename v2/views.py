@@ -383,7 +383,7 @@ def send_alert(request: Request) -> Response:
             android=messaging.AndroidConfig(
                 priority='high'
             ),
-            token=token
+            token=token.fcm_token
         )
 
         try:
