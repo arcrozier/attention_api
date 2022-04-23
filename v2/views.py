@@ -376,7 +376,7 @@ def send_alert(request: Request) -> Response:
             data={
                 'action': 'alert',
                 'alert_id': alert_id,
-                'alert_to': request.data['to'],
+                'alert_to': str(request.data['to']),
                 'alert_from': request.user.username,
                 'alert_message': request.data['message']
             },
