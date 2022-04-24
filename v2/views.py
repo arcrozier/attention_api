@@ -387,7 +387,7 @@ def send_alert(request: Request) -> Response:
         )
 
         try:
-            response = messaging.send(message)
+            messaging.send(message)
             at_least_one_success = True
         except InvalidArgumentError as e:
             logger.warning(f'An alert failed to send: {e.cause}')
@@ -422,7 +422,7 @@ def alert_read(request: Request) -> Response:
         'fcm_token']).union(FCMTokens.objects.filter(user__username=request.data['from']))
 
     if not bool(tokens):
-        logger.warning("Could not find tokens for recipient or the users other devices")
+        logger.warning("Could not find tokens for recipient or the users' other devices")
         return Response(build_response(False, f'An error occurred'), status=500)
     try:
         firebase_admin.initialize_app()
@@ -430,12 +430,11 @@ def alert_read(request: Request) -> Response:
         logger.info('Firebase Admin app already initialized')
 
     at_least_one_success: bool = False
-    alert_id = time.time()
     for token in tokens:
         message = messaging.Message(
             data={
                 'action': 'read',
-                'alert_id': str(alert_id),
+                'alert_id': request.data['alert_id'],
                 'username_to': request.user.username,
             },
             android=messaging.AndroidConfig(
@@ -445,7 +444,7 @@ def alert_read(request: Request) -> Response:
         )
 
         try:
-            response = messaging.send(message)
+            messaging.send(message)
             at_least_one_success = True
         except InvalidArgumentError as e:
             logger.warning(f'An alert failed to send: {e.cause}')
