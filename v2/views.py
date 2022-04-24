@@ -418,8 +418,8 @@ def alert_read(request: Request) -> Response:
         friend.last_sent_message_read = True
         friend.save()
 
-    tokens: QuerySet = FCMTokens.objects.filter(user__username=request.data['from']).exclude(fcm_token=request.data[
-        'fcm_token']).union(FCMTokens.objects.filter(user__username=request.user.username))
+    tokens: QuerySet = FCMTokens.objects.filter(user__username=request.user.username).exclude(fcm_token=request.data[
+        'fcm_token']).union(FCMTokens.objects.filter(user__username=request.data['from']))
 
     if not bool(tokens):
         logger.warning("Could not find tokens for recipient or the users other devices")
