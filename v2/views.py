@@ -439,7 +439,7 @@ def alert_read(request: Request) -> Response:
                 'username_to': request.user.username,
             },
             android=messaging.AndroidConfig(
-                priority='low'
+                priority='normal'
             ),
             token=token
         )
