@@ -106,7 +106,7 @@ def add_friend(request: Request) -> Response:
     try:
         friend = get_user_model().objects.get(username=request.data['username'])
         Friend.objects.update_or_create(owner=request.user, friend=friend, defaults={
-            'deleted': False})
+            'deleted': False, 'name': f'{friend.first_name} {friend.last_name}'})
         return Response(build_response(True, 'Successfully added/restored friend'), status=200)
     except IntegrityError:
         return Response(build_response(False, 'An error occurred when restoring friend'), status=400)
