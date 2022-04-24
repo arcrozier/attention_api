@@ -435,7 +435,7 @@ def alert_read(request: Request) -> Response:
         message = messaging.Message(
             data={
                 'action': 'read',
-                'alert_id': alert_id,
+                'alert_id': str(alert_id),
                 'username_to': request.user.username,
             },
             android=messaging.AndroidConfig(
