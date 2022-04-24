@@ -106,7 +106,7 @@ def add_friend(request: Request) -> Response:
     try:
         friend = get_user_model().objects.get(username=request.data['username'])
         Friend.objects.update_or_create(owner=request.user, friend=friend, defaults={
-            'deleted': False, 'name': f'{friend.first_name} {friend.last_name}'})
+            'deleted': False})
         return Response(build_response(True, 'Successfully added/restored friend'), status=200)
     except IntegrityError:
         return Response(build_response(False, 'An error occurred when restoring friend'), status=400)
@@ -178,7 +178,10 @@ def get_friend_name(request: Request) -> Response:
         friend = get_user_model().objects.get(username=request.query_params['username'])
         try:
             rel = Friend.objects.get(owner=request.user, friend=friend)
-            return Response(build_response(True, 'Got name', {'name': rel.name}), status=200)
+            if rel.name is not None:
+                return Response(build_response(True, 'Got name', {'name': rel.name}), status=200)
+            return Response(build_response(True, 'Got name', {'name': f'{friend.first_name} {friend.last_name}'}),
+                            status=200)
         except Friend.DoesNotExist:
             return Response(build_response(True, 'Got name', {'name': f'{friend.first_name} {friend.last_name}'}),
                             status=200)

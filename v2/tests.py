@@ -177,7 +177,7 @@ class APIV2TestSuite(TestCase):
         friend: Friend = Friend.objects.get(owner__username='user1', friend__username='user2')
         self.assertFriendEqual(friend,
                                Friend(pk=friend.pk, owner=self.user1, friend=self.user2, sent=0, received=0,
-                                      name='will smith', deleted=False))
+                                      deleted=False))
         friend.sent = 1
         friend.received = 2
         friend.save()
@@ -185,7 +185,7 @@ class APIV2TestSuite(TestCase):
         friend = Friend.objects.get(owner__username='user1', friend__username='user2')
         self.assertFriendEqual(friend,
                                Friend(pk=friend.pk, owner=self.user1, friend=self.user2, sent=1, received=2,
-                                      name='will smith', deleted=False))
+                                      deleted=False))
         friend.deleted = True
         friend.save()
         response = c.post('/v2/add_friend/', {'username': 'user2'}, HTTP_AUTHORIZATION=f'Token {self.token1}')
@@ -193,7 +193,7 @@ class APIV2TestSuite(TestCase):
         friend = Friend.objects.get(owner__username='user1', friend__username='user2')
         self.assertFriendEqual(friend,
                                Friend(pk=friend.pk, owner=self.user1, friend=self.user2, sent=1, received=2,
-                                      name='will smith', deleted=False))
+                                      deleted=False))
 
         # Check that user1 adding user4 as a friend does not add user1 as a friend of user4
         # i.e. user1 -> user4, but user4 !-> user1
@@ -204,7 +204,7 @@ class APIV2TestSuite(TestCase):
         friend: Friend = Friend.objects.get(owner__username='user1', friend__username='user4')
         self.assertFriendEqual(friend,
                                Friend(pk=friend.pk, owner=self.user1, friend=user4, sent=0, received=0,
-                                      name='will skill', deleted=False))
+                                      deleted=False))
         self.assertFalse(Friend.objects.filter(owner__username='user4', friend__username='user1').exists())
 
         # Try to add a user that doesn't exist
@@ -228,6 +228,15 @@ class APIV2TestSuite(TestCase):
         response = c.get('/v2/get_name/', {'username': 'user2'}, HTTP_AUTHORIZATION=f'Token {self.token1}')
         self.assertContains(response, '', status_code=200)
         self.assertEqual(response.data['data'], {'name': 'bro'})
+
+        # check that it still returns a name when one is not manually set
+        user4 = get_user_model().objects.create_user(username='user4', password='my_password4', first_name='will',
+                                                     last_name='skill')
+        Friend.objects.create(owner=self.user1, friend=user4, sent=3)
+        response = c.get('/v2/get_name/', {'username': 'user4'}, HTTP_AUTHORIZATION=f'Token {self.token1}')
+        self.assertContains(response, '', status_code=200)
+        self.assertEqual(response.data['data'], {'name': 'will skill'})
+
         response = c.get('/v2/get_name/', HTTP_AUTHORIZATION=f'Token {self.token1}')
         self.assertContains(response, '', status_code=400)
         response = c.get('/v2/get_name/', {'not_username': 'user2'}, HTTP_AUTHORIZATION=f'Token {self.token1}')
