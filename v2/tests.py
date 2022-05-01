@@ -15,7 +15,7 @@ from v2.views import check_params
 
 auth_required_post_endpoints = ['send_alert', 'register_device', 'add_friend', 'alert_read']
 auth_required_get_endpoints = ['get_name', 'get_info']
-auth_required_delete_endpoints = ['delete_friend', 'delete_user_data']
+auth_required_delete_endpoints = ['delete_friend/friend', 'delete_user_data']
 auth_required_put_endpoints = ['edit', 'edit_friend_name']
 
 
@@ -248,19 +248,19 @@ class APIV2TestSuite(TestCase):
     def test_delete_friend(self):
         c = Client()
         get_user_model().objects.create_user(username='user4', password='my_password4', first_name='will', last_name='smith')
-        response = c.delete('/v2/delete_friend/', {'friend': 'user1'}, HTTP_AUTHORIZATION=f'Token {self.token2}',
+        response = c.delete('/v2/delete_friend/user1/', HTTP_AUTHORIZATION=f'Token {self.token2}',
                             content_type='application/json')
         self.assertContains(response, '', status_code=200)
         friend = Friend.objects.get(owner__username='user2', friend__username='user1', sent=3, received=0, deleted=True)
 
         # User 4 is not friends with us (or vice versa)
-        response = c.delete('/v2/delete_friend/', {'friend': 'user4'}, HTTP_AUTHORIZATION=f'Token {self.token2}',
+        response = c.delete('/v2/delete_friend/user4/', HTTP_AUTHORIZATION=f'Token {self.token2}',
                             content_type='application/json')
         self.assertContains(response, '', status_code=400)
         self.assertFalse(Friend.objects.filter(owner__username='user1', friend__username='user4').exists())
 
         # User does not exist
-        response = c.delete('/v2/delete_friend/', {'friend': 'user_does_not_exist'},
+        response = c.delete('/v2/delete_friend/user_does_not_exist/',
                             HTTP_AUTHORIZATION=f'Token {self.token2}', content_type='application/json')
         self.assertContains(response, '', status_code=400)
         self.assertFalse(Friend.objects.filter(owner__username='user1',
@@ -270,8 +270,16 @@ class APIV2TestSuite(TestCase):
         friend.save()
         response = c.delete('/v2/delete_friend/', HTTP_AUTHORIZATION=f'Token {self.token2}',
                             content_type='application/json')
-        self.assertContains(response, '', status_code=400)
+        self.assertContains(response, '', status_code=404)
         Friend.objects.get(owner__username='user2', friend__username='user1', sent=3, received=0, deleted=False)
+
+        at_user4 = get_user_model().objects.create_user(username='@_user4', password='my_password4', first_name='will',
+                                                        last_name='smith')
+        Friend.objects.create(owner=self.user2, friend=at_user4)
+        response = c.delete('/v2/delete_friend/@_user4/', HTTP_AUTHORIZATION=f'Token {self.token2}',
+                            content_type='application/json')
+        self.assertContains(response, '', status_code=200)
+        Friend.objects.get(owner__username='user2', friend__username='@_user4', sent=0, received=0, deleted=True)
 
     def test_edit_user(self):
         c = Client()

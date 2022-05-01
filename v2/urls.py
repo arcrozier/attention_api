@@ -27,7 +27,7 @@ urlpatterns = [
     path('register_user/', views.register_user),
     path('add_friend/', views.add_friend),
     path('get_name/', views.get_friend_name),
-    path('delete_friend/', views.delete_friend),
+    path('delete_friend/<str:username>/', views.delete_friend),
     path('edit/', views.edit_user),
     path('get_info/', views.get_user_info),
     path('delete_user_data/', views.delete_user_data),

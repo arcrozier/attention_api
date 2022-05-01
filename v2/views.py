@@ -5,7 +5,6 @@ from typing import Any, Tuple, Dict
 
 import firebase_admin
 from django.contrib.auth import get_user_model, authenticate
-from django.contrib.auth.models import User
 from django.contrib.auth.validators import ASCIIUsernameValidator
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
@@ -190,23 +189,17 @@ def get_friend_name(request: Request) -> Response:
 
 
 @api_view(['DELETE'])
-def delete_friend(request: Request) -> Response:
+def delete_friend(request: Request, username) -> Response:
     """
     DELETE: This friend relationship will be lazy-deleted, and can be fully undone by adding the friend back.
-
-    Requires the `friend` parameter to be set to a current friend of the authenticated user.
 
     Requires authentication.
 
     Returns status 400 if the other user is not a friend, and no data.
     """
-    good, response = check_params(['friend'], request.data)
-    if not good:
-        return response
-
     try:
         with transaction.atomic():
-            friend = Friend.objects.select_for_update().get(owner=request.user, friend__username=request.data['friend'])
+            friend = Friend.objects.select_for_update().get(owner=request.user, friend__username=username)
             friend.deleted = True
             friend.save()
         return Response(build_response(True, 'Successfully deleted friend'), status=200)
