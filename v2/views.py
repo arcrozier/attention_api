@@ -337,7 +337,7 @@ def send_alert(request: Request) -> Response:
     }
     """
     # unauthenticated requests should be denied automatically - test this
-    good, response = check_params(['to', 'message'], request.data)
+    good, response = check_params(['to'], request.data)
     if not good:
         return response
 
@@ -374,7 +374,7 @@ def send_alert(request: Request) -> Response:
                 'alert_id': alert_id,
                 'alert_to': request.data['to'],
                 'alert_from': request.user.username,
-                'alert_message': str(request.data['message'])
+                'alert_message': str(request.data['message']) if 'message' in request.data else None
             },
             android=messaging.AndroidConfig(
                 priority='high'
