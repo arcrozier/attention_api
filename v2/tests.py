@@ -378,6 +378,10 @@ class APIV2TestSuite(TestCase):
     def test_get_user_info(self):
         # dump the user info, check it all matches
         c = Client()
+
+        user4 = get_user_model().objects.create_user(username='user4', password='my_password4', first_name='will', last_name='smith')
+        Friend.objects.create(owner=self.user2, friend=user4, deleted=True)
+
         response = c.get('/v2/get_info/', HTTP_AUTHORIZATION=f'Token {self.token2}')
         self.assertContains(response, '', status_code=200)
         self.assertEqual({
@@ -462,12 +466,17 @@ class APIV2TestSuite(TestCase):
         # This should fail because it doesn't expect GET requests
         response = c.get('/v2/send_alert/', {'to': 'user2', 'message': 'hi'}, HTTP_AUTHORIZATION=f'Token {self.token1}')
         self.assertContains(response, '', status_code=405)
+
+        # Missing 'to' parameter
         response = c.post('/v2/send_alert/', {'message': 'hi'}, HTTP_AUTHORIZATION=f'Token {self.token1}')
         self.assertContains(response, '', status_code=400)
+
+        # Test that you can't send messages to people who don't have you as a friend
         response = c.post('/v2/send_alert/', {'to': 'user1', 'message': 'hi'},
                           HTTP_AUTHORIZATION=f'Token {self.token2}')
         self.assertContains(response, '', status_code=403)
 
+        # Test that deleted friends can't receive messages
         Friend.objects.create(owner=self.user1, friend=self.user2, deleted=True)
         response = c.post('/v2/send_alert/', {'to': 'user1', 'message': 'hi'},
                           HTTP_AUTHORIZATION=f'Token {self.token2}')

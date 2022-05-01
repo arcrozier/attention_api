@@ -308,7 +308,7 @@ def get_user_info(request: Request) -> Response:
     }
     """
     user = request.user
-    friends = [flatten_friend(x) for x in Friend.objects.filter(owner=user)]
+    friends = [flatten_friend(x) for x in Friend.objects.filter(owner=user, deleted=False)]
     data = {
         'username': user.username,
         'first_name': user.first_name,
