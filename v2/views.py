@@ -374,7 +374,7 @@ def send_alert(request: Request) -> Response:
                 'alert_id': alert_id,
                 'alert_to': request.data['to'],
                 'alert_from': request.user.username,
-                'alert_message': str(request.data['message']) if 'message' in request.data else None
+                'alert_message': str(request.data['message']) if 'message' in request.data else "None"
             },
             android=messaging.AndroidConfig(
                 priority='high'
