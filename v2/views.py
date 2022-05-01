@@ -12,6 +12,7 @@ from django.db import transaction, IntegrityError
 from django.db.models import QuerySet
 from firebase_admin import messaging
 from firebase_admin.exceptions import InvalidArgumentError
+from firebase_admin.messaging import UnregisteredError
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
@@ -387,6 +388,8 @@ def send_alert(request: Request) -> Response:
             at_least_one_success = True
         except InvalidArgumentError as e:
             logger.warning(f'An alert failed to send: {e.cause}')
+        except UnregisteredError as e:
+            token.delete()
 
     if not at_least_one_success:
         return Response(build_response(False, f"Unable to send message"), status=400)
