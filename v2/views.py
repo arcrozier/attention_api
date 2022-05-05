@@ -5,6 +5,7 @@ from typing import Any, Tuple, Dict
 
 import firebase_admin
 from django.contrib.auth import get_user_model, authenticate
+from django.contrib.auth.models import User
 from django.contrib.auth.validators import ASCIIUsernameValidator
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
@@ -353,7 +354,7 @@ def send_alert(request: Request) -> Response:
                                                        defaults={'deleted': True})
         friend.sent += 1
         friend.last_sent_alert_id = alert_id
-        friend.last_sent_message_read = False
+        friend.last_sent_message_status = Friend.SENT
         friend.save()
     except Friend.DoesNotExist:
         return Response(build_response(False, f'Could not send message as {to} does not have you as a friend'),
@@ -388,12 +389,61 @@ def send_alert(request: Request) -> Response:
             at_least_one_success = True
         except InvalidArgumentError as e:
             logger.warning(f'An alert failed to send: {e.cause}')
-        except UnregisteredError as e:
+        except UnregisteredError:
             token.delete()
 
     if not at_least_one_success:
         return Response(build_response(False, f"Unable to send message"), status=400)
     return Response(build_response(True, "Successfully sent message", data={'id': alert_id}), status=200)
+
+
+@api_view(['POST'])
+def alert_delivered(request: Request) -> Response:
+    good, response = check_params(['alert_id', 'from', 'fcm_token'], request.data)
+    if not good:
+        return response
+
+    friends_read = Friend.objects.filter(owner__username=request.data['from'],
+                                         last_sent_alert_id=request.data['alert_id'])
+    for friend in friends_read:
+        friend.last_sent_message_status = Friend.DELIVERED
+        friend.save()
+
+    tokens: QuerySet = FCMTokens.objects.filter(user__username=request.data['from'])
+
+    if not bool(tokens):
+        logger.warning("Could not find tokens for recipient or the users' other devices")
+        return Response(build_response(False, f'An error occurred'), status=500)
+    try:
+        firebase_admin.initialize_app()
+    except ValueError:
+        logger.info('Firebase Admin app already initialized')
+
+    at_least_one_success: bool = False
+    for token in tokens:
+        message = messaging.Message(
+            data={
+                'action': 'delivered',
+                'alert_id': request.data['alert_id'],
+                'username_to': request.user.username,
+            },
+            android=messaging.AndroidConfig(
+                priority='normal'
+            ),
+            token=token.fcm_token
+        )
+
+        try:
+            messaging.send(message)
+            at_least_one_success = True
+        except InvalidArgumentError as e:
+            logger.warning(f'An alert failed to send: {e.cause}')
+        except UnregisteredError:
+            token.delete()
+
+    if not at_least_one_success:
+        return Response(build_response(False, f"Unable to send read status"), status=400)
+    return Response(build_response(True, "Successfully sent read status"), status=200)
 
 
 @api_view(['POST'])
@@ -414,7 +464,7 @@ def alert_read(request: Request) -> Response:
     friends_read = Friend.objects.filter(owner__username=request.data['from'],
                                          last_sent_alert_id=request.data['alert_id'])
     for friend in friends_read:
-        friend.last_sent_message_read = True
+        friend.last_sent_message_status = Friend.READ
         friend.save()
 
     tokens: QuerySet = FCMTokens.objects.filter(user__username=request.user.username).exclude(fcm_token=request.data[
@@ -447,6 +497,8 @@ def alert_read(request: Request) -> Response:
             at_least_one_success = True
         except InvalidArgumentError as e:
             logger.warning(f'An alert failed to send: {e.cause}')
+        except UnregisteredError:
+            token.delete()
 
     if not at_least_one_success:
         return Response(build_response(False, f"Unable to send read status"), status=400)
@@ -477,6 +529,7 @@ def build_response(success: bool, message: str, data: Any = None, string: bool =
 def string_response(args: dict):
     return json.dumps(args)
 
+
 def flatten_friend(friend: Friend):
     return {
         'friend': friend.friend.username,
@@ -484,5 +537,5 @@ def flatten_friend(friend: Friend):
         'sent': friend.sent,
         'received': friend.received,
         'last_message_id_sent': friend.last_sent_alert_id,
-        'last_message_read': friend.last_sent_message_read,
+        'last_message_status': friend.last_sent_message_status,
     }

@@ -6,13 +6,21 @@ from django.db import models
 
 # Create your models here.
 class Friend(models.Model):
+    READ = 'r'
+    DELIVERED = 'd'
+    SENT = 's'
+    DELIVERY_CHOICES = [
+        (READ, 'Read'),
+        (DELIVERED, "Delivered"),
+        (SENT, "Sent"),
+    ]
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='friend_set')
     friend = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='friend_of_set')
     name = models.CharField(max_length=150, null=True)
     sent = models.IntegerField(default=0)
     received = models.IntegerField(default=0)
     deleted = models.BooleanField(default=False)
-    last_sent_message_read = models.BooleanField(default=False)
+    last_sent_message_status = models.CharField(max_length=1, choices=DELIVERY_CHOICES, null=True, default=None)
     last_sent_alert_id = models.CharField(max_length=100, null=True)
 
     class Meta:

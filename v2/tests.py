@@ -13,7 +13,7 @@ from v2.views import check_params
 
 # Create your tests here.
 
-auth_required_post_endpoints = ['send_alert', 'register_device', 'add_friend', 'alert_read']
+auth_required_post_endpoints = ['send_alert', 'register_device', 'add_friend', 'alert_read', 'alert_delivered']
 auth_required_get_endpoints = ['get_name', 'get_info']
 auth_required_delete_endpoints = ['delete_friend/friend', 'delete_user_data']
 auth_required_put_endpoints = ['edit', 'edit_friend_name']
@@ -396,7 +396,7 @@ class APIV2TestSuite(TestCase):
                     'sent': 3,
                     'received': 0,
                     'last_message_id_sent': None,
-                    'last_message_read': False
+                    'last_message_status': None
                 }
             ]
         }, response.data['data'])
