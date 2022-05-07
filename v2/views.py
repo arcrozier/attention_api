@@ -398,7 +398,7 @@ def send_alert(request: Request) -> Response:
 
 @api_view(['POST'])
 def alert_delivered(request: Request) -> Response:
-    good, response = check_params(['alert_id', 'from', 'fcm_token'], request.data)
+    good, response = check_params(['alert_id', 'from'], request.data)
     if not good:
         return response
 
