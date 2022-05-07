@@ -5,7 +5,6 @@ from typing import Any, Tuple, Dict
 
 import firebase_admin
 from django.contrib.auth import get_user_model, authenticate
-from django.contrib.auth.models import User
 from django.contrib.auth.validators import ASCIIUsernameValidator
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
@@ -537,5 +536,5 @@ def flatten_friend(friend: Friend):
         'sent': friend.sent,
         'received': friend.received,
         'last_message_id_sent': friend.last_sent_alert_id,
-        'last_message_status': friend.last_sent_message_status,
+        'last_message_status': friend.get_last_sent_message_status_display(),
     }
