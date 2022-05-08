@@ -411,7 +411,7 @@ def alert_delivered(request: Request) -> Response:
     tokens: QuerySet = FCMTokens.objects.filter(user__username=request.data['from'])
 
     if not bool(tokens):
-        logger.warning("Could not find tokens for recipient or the users' other devices")
+        logger.warning("Could not find tokens for recipient")
         return Response(build_response(False, f'An error occurred'), status=500)
     try:
         firebase_admin.initialize_app()
@@ -441,8 +441,8 @@ def alert_delivered(request: Request) -> Response:
             token.delete()
 
     if not at_least_one_success:
-        return Response(build_response(False, f"Unable to send read status"), status=400)
-    return Response(build_response(True, "Successfully sent read status"), status=200)
+        return Response(build_response(False, f"Unable to send delivery status"), status=400)
+    return Response(build_response(True, "Successfully sent delivery status"), status=200)
 
 
 @api_view(['POST'])
