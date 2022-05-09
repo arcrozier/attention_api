@@ -407,6 +407,8 @@ def alert_delivered(request: Request) -> Response:
     for friend in friends_read:
         friend.last_sent_message_status = Friend.DELIVERED
         friend.save()
+    if len(friends_read < 1):
+        return Response(build_response(True, "Delivered message was not the last sent"))
 
     tokens: QuerySet = FCMTokens.objects.filter(user__username=request.data['from'])
 
@@ -465,6 +467,8 @@ def alert_read(request: Request) -> Response:
     for friend in friends_read:
         friend.last_sent_message_status = Friend.READ
         friend.save()
+    if len(friends_read < 1):
+        return Response(build_response(True, "Read message was not the last sent"))
 
     tokens: QuerySet = FCMTokens.objects.filter(user__username=request.user.username).exclude(fcm_token=request.data[
         'fcm_token']).union(FCMTokens.objects.filter(user__username=request.data['from']))
