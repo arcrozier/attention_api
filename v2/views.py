@@ -402,12 +402,17 @@ def alert_delivered(request: Request) -> Response:
     if not good:
         return response
 
-    friends_read = Friend.objects.filter(owner__username=request.data['from'],
-                                         last_sent_alert_id=request.data['alert_id'])
-    for friend in friends_read:
-        friend.last_sent_message_status = Friend.DELIVERED
-        friend.save()
-    if len(friends_read) < 1:
+    try:
+        with transaction.atomic():
+            friend = Friend.objects.select_for_update().get(owner__username=request.data['from'],
+                                                            friend__username=request.user.username,
+                                                            last_sent_alert_id=request.data['alert_id'])
+            if friend.last_sent_message_status == Friend.SENT:
+                friend.last_sent_message_status = Friend.DELIVERED
+                friend.save()
+            else:
+                return Response(build_response(True, "Message was already read or delivered"))
+    except Friend.DoesNotExist:
         return Response(build_response(True, "Delivered message was not the last sent"))
 
     tokens: QuerySet = FCMTokens.objects.filter(user__username=request.data['from'])
@@ -462,12 +467,17 @@ def alert_read(request: Request) -> Response:
     if not good:
         return response
 
-    friends_read = Friend.objects.filter(owner__username=request.data['from'],
-                                         last_sent_alert_id=request.data['alert_id'])
-    for friend in friends_read:
-        friend.last_sent_message_status = Friend.READ
-        friend.save()
-    if len(friends_read) < 1:
+    try:
+        with transaction.atomic():
+            friend = Friend.objects.select_for_update().get(owner__username=request.data['from'],
+                                                            friend__username=request.user.username,
+                                                            last_sent_alert_id=request.data['alert_id'])
+            if friend.last_sent_message_status != Friend.READ:
+                friend.last_sent_message_status = Friend.READ
+                friend.save()
+            else:
+                return Response(build_response(True, "Message was already read"))
+    except Friend.DoesNotExist:
         return Response(build_response(True, "Read message was not the last sent"))
 
     tokens: QuerySet = FCMTokens.objects.filter(user__username=request.user.username).exclude(fcm_token=request.data[
