@@ -361,7 +361,7 @@ def send_alert(request: Request) -> Response:
 
     tokens: QuerySet = FCMTokens.objects.filter(user__username=to)
     if not bool(tokens):
-        return Response(build_response(False, f'Could not find user {to}'), status=400)
+        return Response(build_response(False, f'Could not find devices belong to user {to}'), status=400)
     try:
         firebase_admin.initialize_app()
     except ValueError:
