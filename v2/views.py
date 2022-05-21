@@ -55,9 +55,10 @@ def register_user(request: Request) -> Response:
     """
     POST: Registers a new user account with the provided credentials
 
-    Requires `first_name`, `last_name`, `username`, and `password`. Optionally accepts `email` as well. Username will be
-    a unique identifier for the user. Email is currently not used, but may at some point be used for password reset/MFA/
-    account alerts.
+    Requires `first_name`, `last_name`, `username`, `password`, and `tos_agree`. Optionally accepts `email` as well.
+    Username will be a unique identifier for the user. Email is currently not used, but may at some point be used for
+    password reset/MFA/account alerts.
+    `tos_agree` must be "yes" (case-sensitive)
 
     Does not require authentication.
 
@@ -65,9 +66,12 @@ def register_user(request: Request) -> Response:
     Otherwise: status 200
     Returns no data.
     """
-    good, response = check_params(['first_name', 'last_name', 'username', 'password'], request.data)
+    good, response = check_params(['first_name', 'last_name', 'username', 'password', 'tos_agree'], request.data)
     if not good:
         return response
+    if request.data['tos_agree'] != 'yes':
+        return Response(build_response(False, 'You must agree to the terms of service to register an account'),
+                        status=400)
     if len(request.data['password']) < 8:
         return Response(build_response(False, 'Password must be at least 8 characters'), status=400)
     try:

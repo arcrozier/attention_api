@@ -40,7 +40,7 @@ class APIV2TestSuite(TestCase):
         c = Client()
         self.assertEqual(get_user_model().objects.count(), 2)
         response = c.post('/v2/register_user/', {'username': 'user3', 'password': 'my_password3', 'first_name':
-            'joe', 'last_name': 'blow'})
+                                                 'joe', 'last_name': 'blow', 'tos_agree': 'yes'})
         self.assertContains(response, '')
         self.assertEqual(get_user_model().objects.count(), 3)
         user1 = get_user_model().objects.get(username='user1')
@@ -57,7 +57,7 @@ class APIV2TestSuite(TestCase):
         self.assertEqual(user3.email, '')
 
         response = c.post('/v2/register_user/', {'username': 'user4', 'password': 'my_password4', 'first_name':
-            'john', 'last_name': 'dohn'})
+                                                 'john', 'last_name': 'dohn', 'tos_agree': 'yes'})
         self.assertContains(response, '')
         self.assertEqual(get_user_model().objects.count(), 4)
         user1 = get_user_model().objects.get(username='user1')
@@ -78,7 +78,8 @@ class APIV2TestSuite(TestCase):
         self.assertEqual(user4.email, '')
 
         response = c.post('/v2/register_user/', {'username': 'user5', 'password': 'my_password5', 'first_name':
-            'sean', 'last_name': 'bean', 'email': 'valid_email@example.com'})
+                                                 'sean', 'last_name': 'bean', 'email': 'valid_email@example.com',
+                                                 'tos_agree': 'yes'})
         self.assertContains(response, '')
         self.assertEqual(get_user_model().objects.count(), 5)
         user1 = get_user_model().objects.get(username='user1')
@@ -108,44 +109,68 @@ class APIV2TestSuite(TestCase):
         """
         c = Client()
         response = c.post('/v2/register_user/', {'username': 'user2', 'password': 'my_password3',
-                                                 'first_name': 'joe', 'last_name': 'blow'})
+                                                 'first_name': 'joe', 'last_name': 'blow', 'tos_agree': 'yes'})
         print(response.data)
         self.assertContains(response, '', status_code=400)
         self.assertEqual(get_user_model().objects.get(username='user2').first_name, 'will')
         self.assertEqual(get_user_model().objects.get(username='user2').last_name, 'smith')
 
         response = c.post('/v2/register_user/', {'username': 'user3', 'password': 'my_password3',
-                                                 'first_name': 'joe', 'last_name': 'blow', 'email': 'invalid_email'})
+                                                 'first_name': 'joe', 'last_name': 'blow', 'email': 'invalid_email',
+                                                 'tos_agree': 'yes'})
         print(response.data)
         self.assertContains(response, '', status_code=400)
         self.assertFalse(get_user_model().objects.filter(username='user3').exists())
 
         response = c.post('/v2/register_user/', {'username': 'user3', 'password': 'my_password3',
                                                  'first_name': 'joe', 'last_name': 'blow',
-                                                 'email': 'invalid_email@gmail'})
+                                                 'email': 'invalid_email@gmail', 'tos_agree': 'yes'})
         print(response.data)
         self.assertContains(response, '', status_code=400)
         self.assertFalse(get_user_model().objects.filter(username='user3').exists())
 
         response = c.post('/v2/register_user/', {'username': 'user3',
                                                  'first_name': 'joe', 'last_name': 'blow',
-                                                 'email': 'valid_email@gmail.com'})
+                                                 'email': 'valid_email@gmail.com', 'tos_agree': 'yes'})
         print(response.data)
         self.assertContains(response, '', status_code=400)
         self.assertFalse(get_user_model().objects.filter(username='user3').exists())
 
         response = c.post('/v2/register_user/', {'username': 'user3',
                                                  'first_name': 'joe', 'last_name': 'blow', 'password': '6chars',
-                                                 'email': 'valid_email@gmail.com'})
+                                                 'email': 'valid_email@gmail.com', 'tos_agree': 'yes'})
         self.assertContains(response, '', status_code=400)
         self.assertFalse(get_user_model().objects.filter(username='user3').exists())
 
         response = c.post('/v2/register_user/', {'username': 'invalid] 😃user',
                                                  'first_name': 'joe', 'last_name': 'blow', 'password': 'good_password',
-                                                 'email': 'valid_email@gmail.com'})
+                                                 'email': 'valid_email@gmail.com', 'tos_agree': 'yes'})
         print(response.data)
         self.assertContains(response, '', status_code=400)
         self.assertFalse(get_user_model().objects.filter(username='invalid] 😃user').exists())
+
+        response = c.post('/v2/register_user/', {'username': 'user5', 'password': 'my_password5', 'first_name':
+                                                 'sean', 'last_name': 'bean', 'email': 'valid_email@example.com'})
+        self.assertContains(response, '', status_code=400)
+        self.assertFalse(get_user_model().objects.filter(username='user5').exists())
+
+        response = c.post('/v2/register_user/', {'username': 'user5', 'password': 'my_password5', 'first_name':
+                                                 'sean', 'last_name': 'bean', 'email': 'valid_email@example.com',
+                                                 'tos_agree': 'Yes'})
+        self.assertContains(response, '', status_code=400)
+        self.assertFalse(get_user_model().objects.filter(username='user5').exists())
+
+        response = c.post('/v2/register_user/', {'username': 'user5', 'password': 'my_password5', 'first_name':
+                                                 'sean', 'last_name': 'bean', 'email': 'valid_email@example.com',
+                                                 'tos_agree': 'no'})
+        self.assertContains(response, '', status_code=400)
+        self.assertFalse(get_user_model().objects.filter(username='user5').exists())
+
+        response = c.post('/v2/register_user/', {'username': 'user5', 'password': 'my_password5', 'first_name':
+                                                 'sean', 'last_name': 'bean', 'email': 'valid_email@example.com',
+                                                 'tos_agree': ''})
+        self.assertContains(response, '', status_code=400)
+        self.assertFalse(get_user_model().objects.filter(username='user5').exists())
 
         response = c.put('/v2/register_user/', {'id': 'user1', 'token': 'Updated2'},
                          content_type='application/json')
@@ -658,7 +683,8 @@ class APIV2TestSuite(TestCase):
         for x in range(num_users):
             users.append([f'test_user_{x}', f'test_password_{x}', f'test_first_name_{x}', f'test_last_name_{x}', None])
             response = c.post('/v2/register_user/', {'username': users[x][0], 'password': users[x][1],
-                                                     'first_name': users[x][2], 'last_name': users[x][3]})
+                                                     'first_name': users[x][2], 'last_name': users[x][3],
+                                                     'tos_agree': 'yes'})
             self.assertContains(response, '', status_code=200)
 
         # Get challenges for the users
