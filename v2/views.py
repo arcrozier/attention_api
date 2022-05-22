@@ -75,7 +75,7 @@ def register_user(request: Request) -> Response:
     if len(request.data['password']) < 8:
         return Response(build_response(False, 'Password must be at least 8 characters'), status=400)
     try:
-        if 'email' in request.data:
+        if 'email' in request.data and request.data['email'] != '':
             validate_email(request.data.get('email'))
         with transaction.atomic():
             ASCIIUsernameValidator()(request.data['username'])
