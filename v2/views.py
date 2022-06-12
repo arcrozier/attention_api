@@ -18,10 +18,14 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
+from google.oauth2 import id_token
+from google.auth.transport import requests
 
 from v2.models import FCMTokens, Friend
 
 logger = logging.getLogger(__name__)
+
+CLIENT_ID = '357995852275-tcfjuvtbrk3c57t5gsuc9a9jdfdn137s.apps.googleusercontent.com'
 
 
 @api_view(['POST'])
@@ -89,6 +93,33 @@ def register_user(request: Request) -> Response:
     except ValidationError as e:
         return Response(build_response(False, e.message), status=400)
     return Response(build_response(True, 'User created'), status=200)
+
+
+@api_view(['POST'])
+def google_oauth(request: Request) -> Response:
+    good, response = check_params(['id_token'], request.data)
+    if not good:
+        return response
+
+    token = request.data['id_token']
+    try:
+        # Specify the CLIENT_ID of the app that accesses the backend:
+        idinfo = id_token.verify_oauth2_token(token, requests.Request(), CLIENT_ID)
+
+        # Or, if multiple clients access the backend server:
+        # idinfo = id_token.verify_oauth2_token(token, requests.Request())
+        # if idinfo['aud'] not in [CLIENT_ID_1, CLIENT_ID_2, CLIENT_ID_3]:
+        #     raise ValueError('Could not verify audience.')
+
+        # If auth request is from a G Suite domain:
+        # if idinfo['hd'] != GSUITE_DOMAIN_NAME:
+        #     raise ValueError('Wrong hosted domain.')
+
+        # ID token is valid. Get the user's Google Account ID from the decoded token.
+        userid = idinfo['sub']
+    except ValueError:
+        # Invalid token
+        return Response(build_response(False, 'Invalid Google token provided'), status=403)
 
 
 @api_view(['POST'])
