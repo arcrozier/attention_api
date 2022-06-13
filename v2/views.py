@@ -82,7 +82,7 @@ def register_user(request: Request) -> Response:
         if 'email' in request.data and request.data['email'] != '':
             validate_email(request.data.get('email'))
         with transaction.atomic():
-            ASCIIUsernameValidator()(request.data['username'])
+            # ASCIIUsernameValidator()(request.data['username'])
             get_user_model().objects.create_user(first_name=request.data['first_name'],
                                                  last_name=request.data['last_name'],
                                                  username=request.data['username'],

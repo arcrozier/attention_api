@@ -1,11 +1,18 @@
 from django.conf import settings
 from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.validators import ASCIIUsernameValidator
 from django.db import models
 
 
 # Create your models here.
 class User(AbstractUser):
-    pass
+    username = models.CharField(max_length=150, unique=True, blank=False, validators=[ASCIIUsernameValidator()])
+    email = models.EmailField(unique=True, blank=True, null=True, default=None, verbose_name='email address')
+
+    def save(self, *args, **kwargs):
+        if self.email == "":
+            self.email = None
+        super().save(*args, **kwargs)
 
 
 class Friend(models.Model):
