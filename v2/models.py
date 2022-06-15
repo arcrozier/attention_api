@@ -1,13 +1,12 @@
 from django.conf import settings
 from django.contrib.auth.models import AbstractUser
-from django.contrib.auth.validators import ASCIIUsernameValidator
 from django.db import models
+from django.utils.translation import gettext_lazy as _
 
 
 # Create your models here.
 class User(AbstractUser):
-    username = models.CharField(max_length=150, unique=True, blank=False, validators=[ASCIIUsernameValidator()])
-    email = models.EmailField(unique=True, blank=True, null=True, default=None, verbose_name='email address')
+    email = models.EmailField(_('email'), blank=True, null=True, unique=True)
 
     def save(self, *args, **kwargs):
         if self.email == "":
@@ -47,3 +46,8 @@ class FCMTokens(models.Model):
         constraints = [
             models.UniqueConstraint(fields=['user', 'fcm_token'], name='no_duplicate_user_tokens')
         ]
+
+
+class GoogleUser(models.Model):
+    userId = models.CharField(max_length=100, unique=True, blank=False, null=False)
+    userAcc = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)

@@ -13,13 +13,13 @@ from django.db.models import QuerySet
 from firebase_admin import messaging
 from firebase_admin.exceptions import InvalidArgumentError
 from firebase_admin.messaging import UnregisteredError
+from google.auth.transport import requests
+from google.oauth2 import id_token
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
-from google.oauth2 import id_token
-from google.auth.transport import requests
 
 from v2.models import FCMTokens, Friend
 
@@ -82,7 +82,7 @@ def register_user(request: Request) -> Response:
         if 'email' in request.data and request.data['email'] != '':
             validate_email(request.data.get('email'))
         with transaction.atomic():
-            # ASCIIUsernameValidator()(request.data['username'])
+            ASCIIUsernameValidator()(request.data['username'])
             get_user_model().objects.create_user(first_name=request.data['first_name'],
                                                  last_name=request.data['last_name'],
                                                  username=request.data['username'],
@@ -117,6 +117,13 @@ def google_oauth(request: Request) -> Response:
 
         # ID token is valid. Get the user's Google Account ID from the decoded token.
         userid = idinfo['sub']
+        # todo - get email, given_name, family_name from token
+        #   check if userId exists in google users table
+        #       if it does, get or generate a token and return it
+        #       if it does not, check if request has a username field
+        #           if it does, create user with username, name, email, and set_unusable_password() (or pass None for
+        #           the password)
+        #           if it does not, return an error - client should send back a request with a username
     except ValueError:
         # Invalid token
         return Response(build_response(False, 'Invalid Google token provided'), status=403)

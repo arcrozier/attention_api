@@ -31,12 +31,12 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
-AUTH_USER_MODEL = production.AUTH_USER_MODEL
-
 
 # Application definition
 
 INSTALLED_APPS = production.INSTALLED_APPS
+
+AUTH_USER_MODEL = production.AUTH_USER_MODEL
 
 MIDDLEWARE = production.MIDDLEWARE
 

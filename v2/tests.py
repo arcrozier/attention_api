@@ -142,12 +142,12 @@ class APIV2TestSuite(TestCase):
         self.assertContains(response, '', status_code=400)
         self.assertFalse(get_user_model().objects.filter(username='user3').exists())
 
-        # response = c.post('/v2/register_user/', {'username': 'invalid] 😃user',
-        #                                          'first_name': 'joe', 'last_name': 'blow', 'password': 'good_password',
-        #                                          'email': 'valid_email@gmail.com', 'tos_agree': 'yes'})
-        # print(response.data)
-        # self.assertContains(response, '', status_code=400)
-        # self.assertFalse(get_user_model().objects.filter(username='invalid] 😃user').exists())
+        response = c.post('/v2/register_user/', {'username': 'invalid] 😃user',
+                                                 'first_name': 'joe', 'last_name': 'blow', 'password': 'good_password',
+                                                 'email': 'valid_email@gmail.com', 'tos_agree': 'yes'})
+        print(response.data)
+        self.assertContains(response, '', status_code=400)
+        self.assertFalse(get_user_model().objects.filter(username='invalid] 😃user').exists())
 
         response = c.post('/v2/register_user/', {'username': 'user5', 'password': 'my_password5', 'first_name':
                                                  'sean', 'last_name': 'bean', 'email': 'valid_email@example.com'})

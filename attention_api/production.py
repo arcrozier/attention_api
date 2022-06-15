@@ -30,8 +30,6 @@ DB_NAME = 'attention'
 DB_USER = os.getenv('ATTENTION_API_DB_USER', 'NOT FOUND')
 DB_PASS = os.getenv('ATTENTION_API_DB_PASS', 'NOT FOUND')
 
-AUTH_USER_MODEL = 'v2.User'
-
 
 # Application definition
 INSTALLED_APPS = [
@@ -45,6 +43,8 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'v2.apps.V2Config'
 ]
+
+AUTH_USER_MODEL = 'v2.User'
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
