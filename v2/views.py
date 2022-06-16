@@ -21,7 +21,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from v2.models import FCMTokens, Friend
+from v2.models import FCMTokens, Friend, GoogleUser
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +124,30 @@ def google_oauth(request: Request) -> Response:
         #           if it does, create user with username, name, email, and set_unusable_password() (or pass None for
         #           the password)
         #           if it does not, return an error - client should send back a request with a username
+        email = idinfo['email']
+        first_name = idinfo['given_name']
+        last_name = idinfo['family_name']
+        user_set = GoogleUser.objects.select_for_update().filter(userId=userid)
+        try:
+            with transaction.atomic():
+                if 'username' in request.data:
+                    ASCIIUsernameValidator()(request.data['username'])
+                    user = get_user_model().objects.create_user(first_name=first_name,
+                                                                last_name=last_name,
+                                                                username=request.data['username'],
+                                                                email=email,
+                                                                password=None)
+                    google = GoogleUser(userId=userid, userAcc=user)
+                    google.save()
+                if user_set or 'username' in request.data:
+                    token, _ = Token.objects.get_or_create(user=user_set.get().userAcc)
+
+        except IntegrityError:
+            # username taken
+            pass
+        except ValidationError:
+            pass
+
     except ValueError:
         # Invalid token
         return Response(build_response(False, 'Invalid Google token provided'), status=403)
