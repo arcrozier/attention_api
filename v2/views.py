@@ -106,24 +106,8 @@ def google_oauth(request: Request) -> Response:
         # Specify the CLIENT_ID of the app that accesses the backend:
         idinfo = id_token.verify_oauth2_token(token, requests.Request(), CLIENT_ID)
 
-        # Or, if multiple clients access the backend server:
-        # idinfo = id_token.verify_oauth2_token(token, requests.Request())
-        # if idinfo['aud'] not in [CLIENT_ID_1, CLIENT_ID_2, CLIENT_ID_3]:
-        #     raise ValueError('Could not verify audience.')
-
-        # If auth request is from a G Suite domain:
-        # if idinfo['hd'] != GSUITE_DOMAIN_NAME:
-        #     raise ValueError('Wrong hosted domain.')
-
         # ID token is valid. Get the user's Google Account ID from the decoded token.
         userid = idinfo['sub']
-        # todo - get email, given_name, family_name from token
-        #   check if userId exists in google users table
-        #       if it does, get or generate a token and return it
-        #       if it does not, check if request has a username field
-        #           if it does, create user with username, name, email, and set_unusable_password() (or pass None for
-        #           the password)
-        #           if it does not, return an error - client should send back a request with a username
         email = idinfo['email']
         first_name = idinfo['given_name']
         last_name = idinfo['family_name']
@@ -141,12 +125,15 @@ def google_oauth(request: Request) -> Response:
                     google.save()
                 if user_set or 'username' in request.data:
                     token, _ = Token.objects.get_or_create(user=user_set.get().userAcc)
+                    return Response({'token': token})
+                else:
+                    return Response(build_response(success=False, message='Provide a username to create an account'),
+                                    status=401)
 
         except IntegrityError:
-            # username taken
-            pass
-        except ValidationError:
-            pass
+            return Response(build_response(False, 'Username taken'), status=400)
+        except ValidationError as e:
+            return Response(build_response(False, e.message), status=400)
 
     except ValueError:
         # Invalid token
