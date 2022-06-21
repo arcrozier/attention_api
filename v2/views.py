@@ -97,6 +97,18 @@ def register_user(request: Request) -> Response:
 
 @api_view(['POST'])
 def google_oauth(request: Request) -> Response:
+    """
+    POST: Logs in the user with the provided Google user id token
+
+    Requires `user_id` - a Google userid
+    If creating an account, requires `username` parameter
+
+    Does not require authentication
+
+    On success, returns the same as the api_token_auth endpoint - {'token': <token>}
+    If the user wants to create an account, returns status 401 - should try again with the username parameter set
+    If the Google account token is invalid, returns status 403
+    """
     good, response = check_params(['id_token'], request.data)
     if not good:
         return response

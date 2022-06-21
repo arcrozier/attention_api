@@ -22,6 +22,7 @@ urlpatterns = [
     # POST: requires valid `username` and `password` parameters. Returns
     # { 'token' : '<token>' }
     path('api_token_auth/', auth_views.obtain_auth_token),
+    path('google_auth/', views.google_oauth),
     path('send_alert/', views.send_alert),
     path('register_device/', views.register_device),
     path('register_user/', views.register_user),
