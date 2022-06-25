@@ -410,6 +410,7 @@ def send_alert(request: Request) -> Response:
     to: str = request.data['to']
 
     alert_id = str(time.time())
+    timestamp = int(time.time())
     try:
         friend = Friend.objects.get(owner__username=to, friend__username=request.user.username, deleted=False)
         friend.received += 1
@@ -440,7 +441,8 @@ def send_alert(request: Request) -> Response:
                 'alert_id': alert_id,
                 'alert_to': request.data['to'],
                 'alert_from': request.user.username,
-                'alert_message': str(request.data['message']) if 'message' in request.data else "None"
+                'alert_message': str(request.data['message']) if 'message' in request.data else "None",
+                'alert_timestamp': str(timestamp)
             },
             android=messaging.AndroidConfig(
                 priority='high'
