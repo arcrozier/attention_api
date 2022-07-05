@@ -313,7 +313,6 @@ class APIV2TestSuite(TestCase):
         Friend.objects.get(owner__username='user2', friend__username='@_user4', sent=0, received=0, deleted=True)
 
     def test_edit_user(self):
-        # TODO make sure we can't change the password of a user with an unusable password (i.e. linked Google account)
         c = Client()
         response = c.put('/v2/edit/', {'first_name': 'aaron'}, HTTP_AUTHORIZATION=f'Token {self.token1}',
                          content_type='application/json')
@@ -407,6 +406,27 @@ class APIV2TestSuite(TestCase):
         self.assertEqual(get_user_model().objects.get(username='user1').password, password)
         self.assertNotEqual(get_user_model().objects.get(username='user1').password, 'wont"t pass')
 
+        user3 = get_user_model().objects.create_user(username='user3',
+                                                     first_name='roly',
+                                                     last_name='poly',
+                                                     password=None)
+        token3 = Token.objects.create(user=user3)
+        response = c.put('/v2/edit/',
+                         {'old_password': '', 'password': 'password'},
+                         HTTP_AUTHORIZATION=f'Token {token3}',
+                         content_type='application/json')
+        self.assertContains(response, '', status_code=403)
+        response = c.put('/v2/edit/',
+                         {'old_password': None, 'password': 'password'},
+                         HTTP_AUTHORIZATION=f'Token {token3}',
+                         content_type='application/json')
+        self.assertContains(response, '', status_code=403)
+        response = c.put('/v2/edit/',
+                         {'old_password': 'password', 'password': 'new_password'},
+                         HTTP_AUTHORIZATION=f'Token {token3}',
+                         content_type='application/json')
+        self.assertContains(response, '', status_code=403)
+
     def test_get_user_info(self):
         # dump the user info, check it all matches
         c = Client()
@@ -421,6 +441,7 @@ class APIV2TestSuite(TestCase):
             'first_name': 'will',
             'last_name': 'smith',
             'email': 'test@sample.verify',
+            'password_login': True,
             'friends': [
                 {
                     'friend': 'user1',

@@ -402,6 +402,7 @@ def get_user_info(request: Request) -> Response:
         first_name: <user's first name>,
         last_name: <user's last name>,
         email: <user's email>,
+        password_login: <boolean: true if user uses password for login, false if they use Google>
         friends: [
             {
                 friend: <friend's username>,
@@ -422,6 +423,7 @@ def get_user_info(request: Request) -> Response:
         'first_name': user.first_name,
         'last_name': user.last_name,
         'email': user.email,
+        'password_login': user.google_id is None,
         'friends': friends,
     }
     return Response(build_response(True, 'Got user data', data=data), status=200)
