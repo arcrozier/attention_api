@@ -23,6 +23,7 @@ urlpatterns = [
     # { 'token' : '<token>' }
     path('api_token_auth/', auth_views.obtain_auth_token),
     path('google_auth/', views.google_oauth),
+    path('link_google_account/', views.link_google_account),
     path('send_alert/', views.send_alert),
     path('register_device/', views.register_device),
     path('register_user/', views.register_user),

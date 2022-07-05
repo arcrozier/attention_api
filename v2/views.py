@@ -6,7 +6,7 @@ from typing import Any, Tuple, Dict
 import firebase_admin
 from django.contrib.auth import get_user_model, authenticate
 from django.contrib.auth.validators import ASCIIUsernameValidator
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ValidationError, PermissionDenied
 from django.core.validators import validate_email
 from django.db import transaction, IntegrityError
 from django.db.models import QuerySet
@@ -311,39 +311,48 @@ def edit_user(request: Request) -> Response:
 
     Returns no data.
     """
-    updated = True
+    if 'password' in request.data and 'old_password' not in request.data:
+        return Response(build_response(False, 'To update password, provide old password'), status=400)
     invalid_field = []
-    with transaction.atomic():
-        user = get_user_model().objects.select_for_update().get(username=request.user.username)
-        if 'first_name' in request.data:
-            user.first_name = request.data['first_name']
-        if 'last_name' in request.data:
-            user.last_name = request.data['last_name']
-        if 'email' in request.data:
-            try:
-                validate_email(request.data['email'])
-                user.email = request.data['email']
-            except ValidationError:
-                updated = False
+    try:
+        with transaction.atomic():
+            user = get_user_model().objects.select_for_update().get(username=request.user.username)
+            if 'username' in request.data:
+                invalid_field.append('username')
+                ASCIIUsernameValidator()(request.data['username'])
+                invalid_field.pop()  # if the username is valid, we remove the field, won't get returned
+                user.username = request.data['username']
+            if 'first_name' in request.data:
+                user.first_name = request.data['first_name']
+            if 'last_name' in request.data:
+                user.last_name = request.data['last_name']
+            if 'email' in request.data:
                 invalid_field.append('email')
-                logger.info('Invalid email provided to update')
-        if 'password' in request.data and updated:  # this check needs to come last
-            if len(request.data['password']) >= 8 and 'old_password' in request.data:
-                check_pass = authenticate(username=request.user.username, password=request.data['old_password'])
-                if check_pass is not None:
-                    user.set_password(request.data['password'])
-                    Token.objects.get(user=user).delete()
+                validate_email(request.data['email'])
+                invalid_field.pop()  # if the email is valid, we remove the field, won't get returned
+                user.email = request.data['email']
+            if 'password' in request.data:
+                if len(request.data['password']) >= 8:
+                    check_pass = authenticate(username=request.user.username, password=request.data['old_password'])
+                    if check_pass is not None:
+                        user.set_password(request.data['password'])
+                        Token.objects.get(user=user).delete()
+                    else:
+                        raise PermissionDenied('Invalid password')
                 else:
-                    return Response(build_response(False, 'Incorrect old password'), status=403)
-            else:
-                updated = False
-                invalid_field.append('password')
-        if updated:
+                    invalid_field.append('password')
+                    raise ValidationError('Password was not long enough')
             user.save()
-            return Response(build_response(True, 'User updated successfully'), status=200)
-    if not updated:
-        return Response(build_response(False, f'Could not update user: invalid value for {",".join(invalid_field)}'),
+    except ValidationError as e:
+        logger.info(e.message)
+    except PermissionDenied:
+        return Response(build_response(False, 'Incorrect old password'), status=403)
+    except IntegrityError:
+        return Response(build_response(False, 'Username or email address in use'), status=400)
+    if len(invalid_field) != 0:
+        return Response(build_response(False, f'Could not update user: invalid value for {", ".join(invalid_field)}'),
                         status=400)
+    return Response(build_response(True, 'User updated successfully'), status=200)
 
 
 @api_view(['POST'])

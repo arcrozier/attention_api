@@ -313,6 +313,7 @@ class APIV2TestSuite(TestCase):
         Friend.objects.get(owner__username='user2', friend__username='@_user4', sent=0, received=0, deleted=True)
 
     def test_edit_user(self):
+        # TODO make sure we can't change the password of a user with an unusable password (i.e. linked Google account)
         c = Client()
         response = c.put('/v2/edit/', {'first_name': 'aaron'}, HTTP_AUTHORIZATION=f'Token {self.token1}',
                          content_type='application/json')
