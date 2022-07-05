@@ -7,10 +7,13 @@ from django.utils.translation import gettext_lazy as _
 # Create your models here.
 class User(AbstractUser):
     email = models.EmailField(_('email'), blank=True, null=True, unique=True)
+    google_id = models.CharField(max_length=100, unique=True, blank=True, null=True)
 
     def save(self, *args, **kwargs):
         if self.email == "":
             self.email = None
+        if self.google_id == "":
+            self.google_id = None
         super().save(*args, **kwargs)
 
 
@@ -47,8 +50,3 @@ class FCMTokens(models.Model):
         constraints = [
             models.UniqueConstraint(fields=['user', 'fcm_token'], name='no_duplicate_user_tokens')
         ]
-
-
-class GoogleUser(models.Model):
-    userId = models.CharField(max_length=100, unique=True, blank=False, null=False)
-    userAcc = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)

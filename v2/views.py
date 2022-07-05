@@ -21,7 +21,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from v2.models import FCMTokens, Friend, GoogleUser
+from v2.models import FCMTokens, Friend
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +96,7 @@ def register_user(request: Request) -> Response:
 
 
 @api_view(['POST'])
+@permission_classes([AllowAny])
 def google_oauth(request: Request) -> Response:
     """
     POST: Logs in the user with the provided Google user id token
@@ -123,7 +124,7 @@ def google_oauth(request: Request) -> Response:
         email = idinfo['email']
         first_name = idinfo['given_name']
         last_name = idinfo['family_name']
-        user_set = GoogleUser.objects.select_for_update().filter(userId=userid)
+        user_set = get_user_model().objects.select_for_update().filter(google_id=userid)
         try:
             with transaction.atomic():
                 if 'username' in request.data:
@@ -133,10 +134,10 @@ def google_oauth(request: Request) -> Response:
                                                                 username=request.data['username'],
                                                                 email=email,
                                                                 password=None)
-                    google = GoogleUser(userId=userid, userAcc=user)
-                    google.save()
+                    user.google_id = userid
+                    user.save()
                 if user_set or 'username' in request.data:
-                    token, _ = Token.objects.get_or_create(user=user_set.get().userAcc)
+                    token, _ = Token.objects.get_or_create(user=user_set.get())
                     return Response({'token': token})
                 else:
                     return Response(build_response(success=False, message='Provide a username to create an account'),
@@ -343,6 +344,38 @@ def edit_user(request: Request) -> Response:
     if not updated:
         return Response(build_response(False, f'Could not update user: invalid value for {",".join(invalid_field)}'),
                         status=400)
+
+
+@api_view(['POST'])
+def link_google_account(request: Request) -> Response:
+    good, response = check_params(['password', 'id_token'], request.data)
+    if not good:
+        return response
+
+    user = request.user
+    token = request.data['id_token']
+
+    check_pass = authenticate(username=request.user.username, password=request.data['password'])
+    if check_pass is None:
+        return Response(build_response(False, 'Incorrect old password'), status=403)
+
+    try:
+        with transaction.atomic():
+            user.set_unusable_password()
+            # Specify the CLIENT_ID of the app that accesses the backend:
+            id_info = id_token.verify_oauth2_token(token, requests.Request(), CLIENT_ID)
+
+            # ID token is valid. Get the user's Google Account ID from the decoded token.
+            user_id = id_info['sub']
+            user.google_id = user_id
+            user.save()
+
+    except ValueError:
+        return Response(build_response(False, 'Invalid Google account'), status=403)
+    except IntegrityError:
+        return Response(build_response(False, 'Google account is already linked to another account'), status=400)
+
+    return Response(build_response(True, 'Google account linked successfully'), status=200)
 
 
 @api_view(['GET', 'HEAD'])
