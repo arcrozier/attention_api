@@ -54,6 +54,31 @@ def register_device(request: Request) -> Response:
 
 
 @api_view(['POST'])
+def unregister_device(request: Request) -> Response:
+    """
+    POST: Registers a device for receiving alerts for an account.
+
+    Requires `fcm_token` parameter to be set to the Firebase Cloud Messaging token to use for that device
+
+    Requires authentication.
+
+    Returns status 400 if the token is already registered to the account
+    Returns status 200 otherwise
+    No data is returned.
+    """
+    good, response = check_params(['fcm_token'], request.data)
+    if not good:
+        return response
+
+    try:
+        with transaction.atomic():
+            FCMTokens.objects.get(user=request.user, fcm_token=request.data['fcm_token']).delete()
+    except FCMTokens.DoesNotExist:
+        return Response(build_response(False, 'That token is not registered'), status=400)
+    return Response(build_response(True, 'Token successfully unregistered'), status=200)
+
+
+@api_view(['POST'])
 @permission_classes([AllowAny])
 def register_user(request: Request) -> Response:
     """
@@ -337,6 +362,7 @@ def edit_user(request: Request) -> Response:
                     if check_pass is not None:
                         user.set_password(request.data['password'])
                         Token.objects.get(user=user).delete()
+                        FCMTokens.objects.filter(user=user).delete()
                     else:
                         raise PermissionDenied('Invalid password')
                 else:

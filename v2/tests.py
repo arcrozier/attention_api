@@ -200,6 +200,32 @@ class APIV2TestSuite(TestCase):
         self.assertContains(response, '', status_code=400)
         self.assertEqual(FCMTokens.objects.get(user__username='user1').fcm_token, 'fake token')
 
+    def test_unregister_device(self):
+        c = Client()
+        FCMTokens.objects.create(user=self.user1, fcm_token='fake token')
+        FCMTokens.objects.create(user=self.user1, fcm_token='fake token 1')
+        FCMTokens.objects.create(user=self.user2, fcm_token='fake token 2')
+        response = c.post('/v2/unregister_device/', {'fcm_token': 'fake token'},
+                          HTTP_AUTHORIZATION=f'Token {self.token1}')
+        self.assertContains(response, '', status_code=200)
+        self.assertFalse(FCMTokens.objects.filter(user=self.user1, fcm_token='fake token').exists())
+        self.assertEqual(1, FCMTokens.objects.filter(user=self.user1, fcm_token='fake token 1').count())
+        self.assertEqual(1, FCMTokens.objects.filter(user=self.user2, fcm_token='fake token 2').count())
+
+        response = c.post('/v2/unregister_device/', {'fcm_token': 'fake token 2'},
+                          HTTP_AUTHORIZATION=f'Token {self.token2}')
+        self.assertContains(response, '', status_code=200)
+        self.assertFalse(FCMTokens.objects.filter(user=self.user1, fcm_token='fake token').exists())
+        self.assertEqual(1, FCMTokens.objects.filter(user=self.user1, fcm_token='fake token 1').count())
+        self.assertFalse(FCMTokens.objects.filter(user=self.user2, fcm_token='fake token 2').exists())
+
+        response = c.post('/v2/unregister_device/', {'fcm_token': 'fake token'},
+                          HTTP_AUTHORIZATION=f'Token {self.token1}')
+        self.assertContains(response, '', status_code=400)
+        self.assertFalse(FCMTokens.objects.filter(user=self.user1, fcm_token='fake token').exists())
+        self.assertEqual(1, FCMTokens.objects.filter(user=self.user1, fcm_token='fake token 1').count())
+        self.assertFalse(FCMTokens.objects.filter(user=self.user2, fcm_token='fake token 2').exists())
+
     def test_add_friend(self):
         # Test undeleting a friend doesn't reset sent/received fields
         c = Client()
