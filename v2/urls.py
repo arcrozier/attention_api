@@ -26,6 +26,7 @@ urlpatterns = [
     path('link_google_account/', views.link_google_account),
     path('send_alert/', views.send_alert),
     path('register_device/', views.register_device),
+    path('unregister_device/', views.unregister_device),
     path('register_user/', views.register_user),
     path('add_friend/', views.add_friend),
     path('get_name/', views.get_friend_name),
