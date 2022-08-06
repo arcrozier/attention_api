@@ -31,6 +31,7 @@ CLIENT_ID = '357995852275-tcfjuvtbrk3c57t5gsuc9a9jdfdn137s.apps.googleuserconten
 @api_view(['POST'])
 def register_device(request: Request) -> Response:
     """
+    /v2/register_device/
     POST: Registers a device for receiving alerts for an account.
 
     Requires `fcm_token` parameter to be set to the Firebase Cloud Messaging token to use for that device
@@ -82,6 +83,7 @@ def unregister_device(request: Request) -> Response:
 @permission_classes([AllowAny])
 def register_user(request: Request) -> Response:
     """
+    /v2/register_user/
     POST: Registers a new user account with the provided credentials
 
     Requires `first_name`, `last_name`, `username`, `password`, and `tos_agree`. Optionally accepts `email` as well.
@@ -124,6 +126,7 @@ def register_user(request: Request) -> Response:
 @permission_classes([AllowAny])
 def google_oauth(request: Request) -> Response:
     """
+    /v2/google_auth/
     POST: Logs in the user with the provided Google user id token
 
     Requires `user_id` - a Google userid
@@ -181,6 +184,7 @@ def google_oauth(request: Request) -> Response:
 @api_view(['POST'])
 def add_friend(request: Request) -> Response:
     """
+    /v2/add_friend/
     POST: Adds a user as a friend of the authenticated user. This allows the other user to send messages to the authenticated
     user, but not the other way around (unless that user adds this user as a friend).
 
@@ -208,6 +212,7 @@ def add_friend(request: Request) -> Response:
 @api_view(['PUT'])
 def edit_friend_name(request: Request) -> Response:
     """
+    /v2/edit_friend_name/
     PUT: Edits the name this user has associated with their friend
 
     Every user can give each of their friends a custom name - only the user can see this, not the friend or anyone
@@ -250,6 +255,7 @@ def edit_friend_name(request: Request) -> Response:
 @api_view(['GET', 'HEAD'])
 def get_friend_name(request: Request) -> Response:
     """
+    /v2/get_name/
     GET: Gets the name corresponding to a particular username.
 
     Requires the `username` parameter.
@@ -283,6 +289,7 @@ def get_friend_name(request: Request) -> Response:
 @api_view(['DELETE'])
 def delete_friend(request: Request, username) -> Response:
     """
+    /v2/delete_friend/<str:username>/
     DELETE: This friend relationship will be lazy-deleted, and can be fully undone by adding the friend back.
 
     Requires authentication.
@@ -302,6 +309,7 @@ def delete_friend(request: Request, username) -> Response:
 @api_view(['DELETE'])
 def delete_user_data(request: Request) -> Response:
     """
+    /v2/delete_user/data/
     DELETE: Truly deletes all data associated with the authenticated user (not lazy deletion, cannot be
     undone). Includes references to the user other people have in their friend lists, etc.
 
@@ -326,6 +334,7 @@ def delete_user_data(request: Request) -> Response:
 @api_view(['PUT'])
 def edit_user(request: Request) -> Response:
     """
+    /v2/edit/
     PUT: Updates the corresponding fields for the authenticated user.
 
     Has 4 optional parameters: `first_name`, `last_name`, `email`, `password`, and `old_password`. If `password` is
@@ -383,6 +392,16 @@ def edit_user(request: Request) -> Response:
 
 @api_view(['POST'])
 def link_google_account(request: Request) -> Response:
+    """
+    /v2/link_google_account/
+    POST: Link a user's username/password account to their Google account
+
+    Requires their current password and Google account id token
+
+    Returns 403 if the Google account token or the password is invalid
+    Returns 400 if the Google account is already linked to another account
+    No data
+    """
     good, response = check_params(['password', 'id_token'], request.data)
     if not good:
         return response
@@ -416,6 +435,7 @@ def link_google_account(request: Request) -> Response:
 @api_view(['GET', 'HEAD'])
 def get_user_info(request: Request) -> Response:
     """
+    /v2/get_info/
     GET: Returns a data dump based on the user used to authenticate.
 
     Accepts no parameters.
@@ -458,6 +478,7 @@ def get_user_info(request: Request) -> Response:
 @api_view(['POST'])
 def send_alert(request: Request) -> Response:
     """
+    /v2/send_alert/
     POST: Sends an alert with an optional message to a user. The user must have the authenticated user added as a friend
     for this to succeed.
 
@@ -535,6 +556,16 @@ def send_alert(request: Request) -> Response:
 
 @api_view(['POST'])
 def alert_delivered(request: Request) -> Response:
+    """
+    /v2/alert_delivered/
+    POST: Sends a signal that an alert has been delivered.
+
+    Requires `alert_id` and `from` parameters to be set.
+
+    Requires authentication.
+
+    Returns no data.
+    """
     good, response = check_params(['alert_id', 'from'], request.data)
     if not good:
         return response
@@ -592,6 +623,7 @@ def alert_delivered(request: Request) -> Response:
 @api_view(['POST'])
 def alert_read(request: Request) -> Response:
     """
+    /v2/alert_read/
     POST: Sends a signal to dismiss an alert on all of the user's other devices.
 
     Requires `alert_id`, `from`, and `fcm_token` parameters to be set.
