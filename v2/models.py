@@ -26,7 +26,6 @@ class Friend(models.Model):
         (DELIVERED, "Delivered"),
         (SENT, "Sent"),
     ]
-    # todo add mute user field?
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='friend_set')
     friend = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='friend_of_set')
     name = models.CharField(max_length=150, null=True)

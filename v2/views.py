@@ -687,8 +687,6 @@ def alert_read(request: Request) -> Response:
     return Response(build_response(True, "Successfully sent read status"), status=200)
 
 
-# todo add user muted(boolean) function?
-
 def check_params(expected: list, holder: Dict) -> Tuple[bool, Response]:
     missing: list = []
     for expect in expected:
