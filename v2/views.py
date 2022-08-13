@@ -396,7 +396,9 @@ def link_google_account(request: Request) -> Response:
     /v2/link_google_account/
     POST: Link a user's username/password account to their Google account
 
-    Requires their current password and Google account id token
+    Requires their current password (`password`) and Google account id token (`id_token`)
+
+    Requires authentication
 
     Returns 403 if the Google account token or the password is invalid
     Returns 400 if the Google account is already linked to another account
