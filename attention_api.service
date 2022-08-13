@@ -5,7 +5,7 @@ After=network.target
 
 [Service]
 ExecStart=/var/local/apps/attention_api/start.sh
-Restart=always
+Restart=on-abnormal
 RestartSec=10
 KillMode=mixed
 
