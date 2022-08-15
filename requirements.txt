@@ -1,0 +1,7 @@
+django
+djangorestframework
+python-dotenv
+psycopg2-binary
+firebase-admin
+hypercorn
+google-auth
