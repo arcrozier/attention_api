@@ -8,6 +8,7 @@ from django.utils.translation import gettext_lazy as _
 class User(AbstractUser):
     email = models.EmailField(_('email'), blank=True, null=True, unique=True)
     google_id = models.CharField(max_length=100, unique=True, blank=True, null=True)
+    # TODO add profile photo field
 
     def save(self, *args, **kwargs):
         if self.email == "":

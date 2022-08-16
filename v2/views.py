@@ -331,6 +331,7 @@ def delete_user_data(request: Request) -> Response:
     return Response(build_response(True, 'Successfully deleted user data'), status=200)
 
 
+# TODO add profile picture to this
 @api_view(['PUT'])
 def edit_user(request: Request) -> Response:
     """
@@ -436,6 +437,7 @@ def link_google_account(request: Request) -> Response:
 
 @api_view(['GET', 'HEAD'])
 def get_user_info(request: Request) -> Response:
+    # TODO return profile pictures with each friend and the user's own profile picture
     """
     /v2/get_info/
     GET: Returns a data dump based on the user used to authenticate.
