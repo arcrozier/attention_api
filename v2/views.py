@@ -1,9 +1,11 @@
+import io
 import json
 import logging
 import time
 from typing import Any, Tuple, Dict
 
 import firebase_admin
+from PIL.Image import DecompressionBombError
 from django.contrib.auth import get_user_model, authenticate
 from django.contrib.auth.validators import ASCIIUsernameValidator
 from django.core.exceptions import ValidationError, PermissionDenied
@@ -20,7 +22,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
-
+from PIL import Image, UnidentifiedImageError
 
 from v2.models import FCMTokens, Friend
 
@@ -349,29 +351,36 @@ def edit_user(request: Request) -> Response:
     """
     if 'password' in request.data and 'old_password' not in request.data:
         return Response(build_response(False, 'To update password, provide old password'), status=400)
-    invalid_field = []
+    invalid_field = ''
     try:
         with transaction.atomic():
             user = get_user_model().objects.select_for_update().get(username=request.user.username)
             if 'username' in request.data:
-                invalid_field.append('username')
+                invalid_field = 'username'
                 ASCIIUsernameValidator()(request.data['username'])
-                invalid_field.pop()  # if the username is valid, we remove the field, won't get returned
                 user.username = request.data['username']
             if 'first_name' in request.data:
                 user.first_name = request.data['first_name']
             if 'last_name' in request.data:
                 user.last_name = request.data['last_name']
             if 'email' in request.data:
-                invalid_field.append('email')
+                invalid_field = 'email'
                 validate_email(request.data['email'])
-                invalid_field.pop()  # if the email is valid, we remove the field, won't get returned
                 user.email = request.data['email']
             if 'pfp' in request.data:
-                invalid_field.append('pfp')
-                user.photo
-                user.photo = request.data['pfp']
-                invalid_field.pop()
+                invalid_field = 'pfp'
+                temp_image: Image = Image.open(io.BytesIO(request.data['pfp']))
+                if temp_image.width > temp_image.height:
+                    # image is wider than it is tall - size should be (128 * aspect ratio, 128)
+                    size = (user.PHOTO_SIZE * temp_image.width / temp_image.height, user.PHOTO_SIZE)
+                else:
+                    # image is taller than it is wide - size should be (128, 128 * aspect ratio)
+                    size = (user.PHOTO_SIZE, user.PHOTO_SIZE * temp_image.height / temp_image.width)
+                user.photo = temp_image.resize(size=size, resample=Image.Resampling.LANCZOS)\
+                    .crop(box=((size[0] - user.PHOTO_SIZE) / 2,
+                               (size[1] - user.PHOTO_SIZE) / 2,
+                               (size[0] + user.PHOTO_SIZE) / 2,
+                               (size[1] + user.PHOTO_SIZE) / 2))
             if 'password' in request.data:
                 if len(request.data['password']) >= 8:
                     check_pass = authenticate(username=request.user.username, password=request.data['old_password'])
@@ -382,18 +391,19 @@ def edit_user(request: Request) -> Response:
                     else:
                         raise PermissionDenied('Invalid password')
                 else:
-                    invalid_field.append('password')
+                    invalid_field = 'password'
                     raise ValidationError('Password was not long enough')
             user.save()
-    except ValidationError as e:
+    except (ValidationError, UnidentifiedImageError, ValueError) as e:
         logger.info(e.message)
+        return Response(build_response(False, f'Could not update user: invalid value for {invalid_field}: {e.message}'),
+                        status=400)
     except PermissionDenied:
         return Response(build_response(False, 'Incorrect old password'), status=403)
     except IntegrityError:
         return Response(build_response(False, 'Username or email address in use'), status=400)
-    if len(invalid_field) != 0:
-        return Response(build_response(False, f'Could not update user: invalid value for {", ".join(invalid_field)}'),
-                        status=400)
+    except DecompressionBombError:
+        return Response(build_response(False, 'Profile picture was too large'), status=413)
     return Response(build_response(True, 'User updated successfully'), status=200)
 
 
@@ -444,6 +454,7 @@ def link_google_account(request: Request) -> Response:
 @api_view(['GET', 'HEAD'])
 def get_user_info(request: Request) -> Response:
     # TODO return profile pictures with each friend and the user's own profile picture
+    # but only if a "get pfps" parameter is set?
     """
     /v2/get_info/
     GET: Returns a data dump based on the user used to authenticate.
