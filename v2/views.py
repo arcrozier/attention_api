@@ -455,6 +455,7 @@ def link_google_account(request: Request) -> Response:
 def get_user_info(request: Request) -> Response:
     # TODO return profile pictures with each friend and the user's own profile picture
     # but only if a "get pfps" parameter is set?
+    # separate endpoint that gets pfps?
     """
     /v2/get_info/
     GET: Returns a data dump based on the user used to authenticate.
