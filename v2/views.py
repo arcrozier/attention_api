@@ -21,6 +21,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+
 from v2.models import FCMTokens, Friend
 
 logger = logging.getLogger(__name__)
@@ -366,6 +367,11 @@ def edit_user(request: Request) -> Response:
                 validate_email(request.data['email'])
                 invalid_field.pop()  # if the email is valid, we remove the field, won't get returned
                 user.email = request.data['email']
+            if 'pfp' in request.data:
+                invalid_field.append('pfp')
+                user.photo
+                user.photo = request.data['pfp']
+                invalid_field.pop()
             if 'password' in request.data:
                 if len(request.data['password']) >= 8:
                     check_pass = authenticate(username=request.user.username, password=request.data['old_password'])
