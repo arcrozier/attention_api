@@ -1,3 +1,4 @@
+import base64
 import io
 import json
 import logging
@@ -18,13 +19,14 @@ from firebase_admin.messaging import UnregisteredError
 from google.auth.transport import requests
 from google.oauth2 import id_token
 from rest_framework.authtoken.models import Token
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
 from PIL import Image, UnidentifiedImageError
+from rest_framework.throttling import UserRateThrottle
 
-from v2.models import FCMTokens, Friend
+from v2.models import FCMTokens, Friend, Photo
 
 logger = logging.getLogger(__name__)
 
@@ -334,8 +336,12 @@ def delete_user_data(request: Request) -> Response:
     return Response(build_response(True, 'Successfully deleted user data'), status=200)
 
 
-# TODO add profile picture to this
+class EditUserThrottle(UserRateThrottle):
+    rate = '5/hour'
+
+
 @api_view(['PUT'])
+@throttle_classes([EditUserThrottle])
 def edit_user(request: Request) -> Response:
     """
     /v2/edit/
@@ -354,6 +360,7 @@ def edit_user(request: Request) -> Response:
     invalid_field = ''
     try:
         with transaction.atomic():
+            photo = None
             user = get_user_model().objects.select_for_update().get(username=request.user.username)
             if 'username' in request.data:
                 invalid_field = 'username'
@@ -372,15 +379,19 @@ def edit_user(request: Request) -> Response:
                 temp_image: Image = Image.open(io.BytesIO(request.data['pfp']))
                 if temp_image.width > temp_image.height:
                     # image is wider than it is tall - size should be (128 * aspect ratio, 128)
-                    size = (user.PHOTO_SIZE * temp_image.width / temp_image.height, user.PHOTO_SIZE)
+                    size = (Photo.PHOTO_SIZE * temp_image.width / temp_image.height, user.PHOTO_SIZE)
                 else:
                     # image is taller than it is wide - size should be (128, 128 * aspect ratio)
-                    size = (user.PHOTO_SIZE, user.PHOTO_SIZE * temp_image.height / temp_image.width)
-                user.photo = temp_image.resize(size=size, resample=Image.Resampling.LANCZOS)\
-                    .crop(box=((size[0] - user.PHOTO_SIZE) / 2,
-                               (size[1] - user.PHOTO_SIZE) / 2,
-                               (size[0] + user.PHOTO_SIZE) / 2,
-                               (size[1] + user.PHOTO_SIZE) / 2))
+                    size = (Photo.PHOTO_SIZE, Photo.PHOTO_SIZE * temp_image.height / temp_image.width)
+                temp_image = temp_image.resize(size=size, resample=Image.Resampling.LANCZOS)\
+                    .crop(box=((size[0] - Photo.PHOTO_SIZE) / 2,
+                               (size[1] - Photo.PHOTO_SIZE) / 2,
+                               (size[0] + Photo.PHOTO_SIZE) / 2,
+                               (size[1] + Photo.PHOTO_SIZE) / 2))
+                buffered = io.BytesIO()
+                temp_image.save(buffered, format='PNG')
+                photo, _ = Photo.objects.update_or_create(user=user, defaults={
+                    'photo': base64.b64encode(buffered.getvalue())})
             if 'password' in request.data:
                 if len(request.data['password']) >= 8:
                     check_pass = authenticate(username=request.user.username, password=request.data['old_password'])
@@ -394,6 +405,8 @@ def edit_user(request: Request) -> Response:
                     invalid_field = 'password'
                     raise ValidationError('Password was not long enough')
             user.save()
+            if photo is not None:
+                photo.save()
     except (ValidationError, UnidentifiedImageError, ValueError) as e:
         logger.info(e.message)
         return Response(build_response(False, f'Could not update user: invalid value for {invalid_field}: {e.message}'),
@@ -454,8 +467,6 @@ def link_google_account(request: Request) -> Response:
 @api_view(['GET', 'HEAD'])
 def get_user_info(request: Request) -> Response:
     # TODO return profile pictures with each friend and the user's own profile picture
-    # but only if a "get pfps" parameter is set?
-    # separate endpoint that gets pfps?
     """
     /v2/get_info/
     GET: Returns a data dump based on the user used to authenticate.
@@ -485,7 +496,9 @@ def get_user_info(request: Request) -> Response:
     }
     """
     user = request.user
-    friends = [flatten_friend(x) for x in Friend.objects.filter(owner=user, deleted=False)]
+    friends = [flatten_friend(x) for x in Friend.objects
+               .select_related('friend__photo')
+               .filter(owner=user, deleted=False)]
     data = {
         'username': user.username,
         'first_name': user.first_name,
@@ -497,7 +510,12 @@ def get_user_info(request: Request) -> Response:
     return Response(build_response(True, 'Got user data', data=data), status=200)
 
 
+class AlertThrottle(UserRateThrottle):
+    rate = '15/min'
+
+
 @api_view(['POST'])
+@throttle_classes([AlertThrottle])
 def send_alert(request: Request) -> Response:
     """
     /v2/send_alert/
@@ -738,6 +756,7 @@ def flatten_friend(friend: Friend):
     return {
         'friend': friend.friend.username,
         'name': friend.name or f'{friend.friend.first_name} {friend.friend.last_name}',
+        'photo': friend.friend.photo,
         'sent': friend.sent,
         'received': friend.received,
         'last_message_id_sent': friend.last_sent_alert_id,

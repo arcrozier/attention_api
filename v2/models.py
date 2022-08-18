@@ -10,10 +10,6 @@ from django.utils.translation import gettext_lazy as _
 class User(AbstractUser):
     email = models.EmailField(_('email'), blank=True, null=True, unique=True)
     google_id = models.CharField(max_length=100, unique=True, blank=True, null=True)
-    photo = models.ImageField(upload_to='profiles/')
-    # TODO may want to consider storing the image in the database
-    # but also, maybe put it in a separate table that is linked
-    PHOTO_SIZE: Final = 128
 
     def save(self, *args, **kwargs):
         if self.email == "":
@@ -21,6 +17,13 @@ class User(AbstractUser):
         if self.google_id == "":
             self.google_id = None
         super().save(*args, **kwargs)
+
+
+class Photo(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    photo = models.TextField()
+
+    PHOTO_SIZE: Final = 128
 
 
 class Friend(models.Model):
