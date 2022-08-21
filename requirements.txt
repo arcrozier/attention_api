@@ -1,8 +1,8 @@
-django
-djangorestframework
-python-dotenv
-psycopg2-binary
-firebase-admin
-hypercorn
-google-auth
-pillow
+django>=4.1
+djangorestframework>=3.13.1
+python-dotenv>=0.20.0
+psycopg2-binary>=2.9.3
+firebase-admin>=5.2.0
+hypercorn>=0.13.2
+google-auth>=2.3.3
+pillow>=9.2.0
