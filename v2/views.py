@@ -1,9 +1,12 @@
+import base64
+import io
 import json
 import logging
 import time
 from typing import Any, Tuple, Dict
 
 import firebase_admin
+from PIL.Image import DecompressionBombError
 from django.contrib.auth import get_user_model, authenticate
 from django.contrib.auth.validators import ASCIIUsernameValidator
 from django.core.exceptions import ValidationError, PermissionDenied
@@ -16,12 +19,14 @@ from firebase_admin.messaging import UnregisteredError
 from google.auth.transport import requests
 from google.oauth2 import id_token
 from rest_framework.authtoken.models import Token
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
+from PIL import Image, UnidentifiedImageError
+from rest_framework.throttling import UserRateThrottle
 
-from v2.models import FCMTokens, Friend
+from v2.models import FCMTokens, Friend, Photo
 
 logger = logging.getLogger(__name__)
 
@@ -331,7 +336,12 @@ def delete_user_data(request: Request) -> Response:
     return Response(build_response(True, 'Successfully deleted user data'), status=200)
 
 
+class EditUserThrottle(UserRateThrottle):
+    rate = '5/hour'
+
+
 @api_view(['PUT'])
+@throttle_classes([EditUserThrottle])
 def edit_user(request: Request) -> Response:
     """
     /v2/edit/
@@ -347,24 +357,41 @@ def edit_user(request: Request) -> Response:
     """
     if 'password' in request.data and 'old_password' not in request.data:
         return Response(build_response(False, 'To update password, provide old password'), status=400)
-    invalid_field = []
+    invalid_field = ''
     try:
         with transaction.atomic():
+            photo = None
             user = get_user_model().objects.select_for_update().get(username=request.user.username)
             if 'username' in request.data:
-                invalid_field.append('username')
+                invalid_field = 'username'
                 ASCIIUsernameValidator()(request.data['username'])
-                invalid_field.pop()  # if the username is valid, we remove the field, won't get returned
                 user.username = request.data['username']
             if 'first_name' in request.data:
                 user.first_name = request.data['first_name']
             if 'last_name' in request.data:
                 user.last_name = request.data['last_name']
             if 'email' in request.data:
-                invalid_field.append('email')
+                invalid_field = 'email'
                 validate_email(request.data['email'])
-                invalid_field.pop()  # if the email is valid, we remove the field, won't get returned
                 user.email = request.data['email']
+            if 'pfp' in request.data:
+                invalid_field = 'pfp'
+                temp_image: Image = Image.open(io.BytesIO(request.data['pfp']))
+                if temp_image.width > temp_image.height:
+                    # image is wider than it is tall - size should be (128 * aspect ratio, 128)
+                    size = (Photo.PHOTO_SIZE * temp_image.width / temp_image.height, user.PHOTO_SIZE)
+                else:
+                    # image is taller than it is wide - size should be (128, 128 * aspect ratio)
+                    size = (Photo.PHOTO_SIZE, Photo.PHOTO_SIZE * temp_image.height / temp_image.width)
+                temp_image = temp_image.resize(size=size, resample=Image.Resampling.LANCZOS)\
+                    .crop(box=((size[0] - Photo.PHOTO_SIZE) / 2,
+                               (size[1] - Photo.PHOTO_SIZE) / 2,
+                               (size[0] + Photo.PHOTO_SIZE) / 2,
+                               (size[1] + Photo.PHOTO_SIZE) / 2))
+                buffered = io.BytesIO()
+                temp_image.save(buffered, format='PNG')
+                photo, _ = Photo.objects.update_or_create(user=user, defaults={
+                    'photo': base64.b64encode(buffered.getvalue())})
             if 'password' in request.data:
                 if len(request.data['password']) >= 8:
                     check_pass = authenticate(username=request.user.username, password=request.data['old_password'])
@@ -375,18 +402,21 @@ def edit_user(request: Request) -> Response:
                     else:
                         raise PermissionDenied('Invalid password')
                 else:
-                    invalid_field.append('password')
+                    invalid_field = 'password'
                     raise ValidationError('Password was not long enough')
             user.save()
-    except ValidationError as e:
+            if photo is not None:
+                photo.save()
+    except (ValidationError, UnidentifiedImageError, ValueError) as e:
         logger.info(e.message)
+        return Response(build_response(False, f'Could not update user: invalid value for {invalid_field}: {e.message}'),
+                        status=400)
     except PermissionDenied:
         return Response(build_response(False, 'Incorrect old password'), status=403)
     except IntegrityError:
         return Response(build_response(False, 'Username or email address in use'), status=400)
-    if len(invalid_field) != 0:
-        return Response(build_response(False, f'Could not update user: invalid value for {", ".join(invalid_field)}'),
-                        status=400)
+    except DecompressionBombError:
+        return Response(build_response(False, 'Profile picture was too large'), status=413)
     return Response(build_response(True, 'User updated successfully'), status=200)
 
 
@@ -396,7 +426,9 @@ def link_google_account(request: Request) -> Response:
     /v2/link_google_account/
     POST: Link a user's username/password account to their Google account
 
-    Requires their current password and Google account id token
+    Requires their current password (`password`) and Google account id token (`id_token`)
+
+    Requires authentication
 
     Returns 403 if the Google account token or the password is invalid
     Returns 400 if the Google account is already linked to another account
@@ -434,6 +466,7 @@ def link_google_account(request: Request) -> Response:
 
 @api_view(['GET', 'HEAD'])
 def get_user_info(request: Request) -> Response:
+    # TODO return profile pictures with each friend and the user's own profile picture
     """
     /v2/get_info/
     GET: Returns a data dump based on the user used to authenticate.
@@ -463,7 +496,9 @@ def get_user_info(request: Request) -> Response:
     }
     """
     user = request.user
-    friends = [flatten_friend(x) for x in Friend.objects.filter(owner=user, deleted=False)]
+    friends = [flatten_friend(x) for x in Friend.objects
+               .select_related('friend__photo')
+               .filter(owner=user, deleted=False)]
     data = {
         'username': user.username,
         'first_name': user.first_name,
@@ -475,7 +510,12 @@ def get_user_info(request: Request) -> Response:
     return Response(build_response(True, 'Got user data', data=data), status=200)
 
 
+class AlertThrottle(UserRateThrottle):
+    rate = '15/min'
+
+
 @api_view(['POST'])
+@throttle_classes([AlertThrottle])
 def send_alert(request: Request) -> Response:
     """
     /v2/send_alert/
@@ -687,8 +727,6 @@ def alert_read(request: Request) -> Response:
     return Response(build_response(True, "Successfully sent read status"), status=200)
 
 
-# todo add user muted(boolean) function?
-
 def check_params(expected: list, holder: Dict) -> Tuple[bool, Response]:
     missing: list = []
     for expect in expected:
@@ -718,6 +756,7 @@ def flatten_friend(friend: Friend):
     return {
         'friend': friend.friend.username,
         'name': friend.name or f'{friend.friend.first_name} {friend.friend.last_name}',
+        'photo': friend.friend.photo,
         'sent': friend.sent,
         'received': friend.received,
         'last_message_id_sent': friend.last_sent_alert_id,

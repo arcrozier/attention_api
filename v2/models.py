@@ -1,3 +1,5 @@
+from typing import Final
+
 from django.conf import settings
 from django.contrib.auth.models import AbstractUser
 from django.db import models
@@ -17,6 +19,13 @@ class User(AbstractUser):
         super().save(*args, **kwargs)
 
 
+class Photo(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    photo = models.TextField()
+
+    PHOTO_SIZE: Final = 128
+
+
 class Friend(models.Model):
     READ = 'r'
     DELIVERED = 'd'
@@ -26,7 +35,6 @@ class Friend(models.Model):
         (DELIVERED, "Delivered"),
         (SENT, "Sent"),
     ]
-    # todo add mute user field?
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='friend_set')
     friend = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='friend_of_set')
     name = models.CharField(max_length=150, null=True)
