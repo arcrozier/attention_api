@@ -7,6 +7,7 @@ from typing import Any, Tuple, Dict
 
 import firebase_admin
 from PIL.Image import DecompressionBombError
+from django.conf import settings
 from django.contrib.auth import get_user_model, authenticate
 from django.contrib.auth.validators import ASCIIUsernameValidator
 from django.core.exceptions import ValidationError, PermissionDenied
@@ -341,7 +342,7 @@ class EditUserThrottle(UserRateThrottle):
 
 
 @api_view(['PUT'])
-@throttle_classes([EditUserThrottle])
+@throttle_classes([EditUserThrottle] if not settings.IS_TESTING else [])
 def edit_user(request: Request) -> Response:
     """
     /v2/edit/
@@ -374,24 +375,24 @@ def edit_user(request: Request) -> Response:
                 invalid_field = 'email'
                 validate_email(request.data['email'])
                 user.email = request.data['email']
-            if 'pfp' in request.data:
-                invalid_field = 'pfp'
-                temp_image: Image = Image.open(io.BytesIO(request.data['pfp']))
+            if 'photo' in request.data:
+                invalid_field = 'photo'
+                temp_image: Image.Image = Image.open(io.BytesIO(base64.b64decode(request.data['photo'])))
                 if temp_image.width > temp_image.height:
                     # image is wider than it is tall - size should be (128 * aspect ratio, 128)
-                    size = (Photo.PHOTO_SIZE * temp_image.width / temp_image.height, user.PHOTO_SIZE)
+                    size = ((Photo.PHOTO_SIZE * temp_image.width) // temp_image.height, Photo.PHOTO_SIZE)
                 else:
                     # image is taller than it is wide - size should be (128, 128 * aspect ratio)
-                    size = (Photo.PHOTO_SIZE, Photo.PHOTO_SIZE * temp_image.height / temp_image.width)
+                    size = (Photo.PHOTO_SIZE, (Photo.PHOTO_SIZE * temp_image.height) // temp_image.width)
                 temp_image = temp_image.resize(size=size, resample=Image.Resampling.LANCZOS)\
-                    .crop(box=((size[0] - Photo.PHOTO_SIZE) / 2,
-                               (size[1] - Photo.PHOTO_SIZE) / 2,
-                               (size[0] + Photo.PHOTO_SIZE) / 2,
-                               (size[1] + Photo.PHOTO_SIZE) / 2))
+                    .crop(box=((size[0] - Photo.PHOTO_SIZE) // 2,  # we get the 128 x 128 square in the middle
+                               (size[1] - Photo.PHOTO_SIZE) // 2,
+                               (size[0] + Photo.PHOTO_SIZE) // 2,
+                               (size[1] + Photo.PHOTO_SIZE) // 2))
                 buffered = io.BytesIO()
                 temp_image.save(buffered, format='PNG')
                 photo, _ = Photo.objects.update_or_create(user=user, defaults={
-                    'photo': base64.b64encode(buffered.getvalue())})
+                    'photo': base64.b64encode(buffered.getvalue()).decode()})
             if 'password' in request.data:
                 if len(request.data['password']) >= 8:
                     check_pass = authenticate(username=request.user.username, password=request.data['old_password'])
@@ -408,11 +409,11 @@ def edit_user(request: Request) -> Response:
             if photo is not None:
                 photo.save()
     except (ValidationError, UnidentifiedImageError, ValueError) as e:
-        logger.info(e.message)
-        return Response(build_response(False, f'Could not update user: invalid value for {invalid_field}: {e.message}'),
+        logger.info(str(e))
+        return Response(build_response(False, f'Could not update user: invalid value for {invalid_field}: {e}'),
                         status=400)
     except PermissionDenied:
-        return Response(build_response(False, 'Incorrect old password'), status=403)
+        return Response(build_response(False, 'Incorrect old password'), status=401)
     except IntegrityError:
         return Response(build_response(False, 'Username or email address in use'), status=400)
     except DecompressionBombError:
@@ -481,7 +482,8 @@ def get_user_info(request: Request) -> Response:
         first_name: <user's first name>,
         last_name: <user's last name>,
         email: <user's email>,
-        password_login: <boolean: true if user uses password for login, false if they use Google>
+        password_login: <boolean: true if user uses password for login, false if they use Google>,
+        photo: <user's profile photo>,
         friends: [
             {
                 friend: <friend's username>,
@@ -505,6 +507,7 @@ def get_user_info(request: Request) -> Response:
         'last_name': user.last_name,
         'email': user.email,
         'password_login': user.google_id is None,
+        'photo': user.photo.photo if hasattr(user, 'photo') else None,
         'friends': friends,
     }
     return Response(build_response(True, 'Got user data', data=data), status=200)
@@ -515,7 +518,7 @@ class AlertThrottle(UserRateThrottle):
 
 
 @api_view(['POST'])
-@throttle_classes([AlertThrottle])
+@throttle_classes([AlertThrottle] if not settings.IS_TESTING else [])
 def send_alert(request: Request) -> Response:
     """
     /v2/send_alert/
@@ -756,7 +759,7 @@ def flatten_friend(friend: Friend):
     return {
         'friend': friend.friend.username,
         'name': friend.name or f'{friend.friend.first_name} {friend.friend.last_name}',
-        'photo': friend.friend.photo,
+        'photo': friend.friend.photo.photo if hasattr(friend.friend, 'photo') else None,
         'sent': friend.sent,
         'received': friend.received,
         'last_message_id_sent': friend.last_sent_alert_id,

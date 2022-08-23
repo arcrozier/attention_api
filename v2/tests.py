@@ -1,14 +1,16 @@
+import base64
+import io
 import random
 from typing import Final
 
+from PIL import Image
+from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.contrib.auth.models import User
-from django.contrib.auth.validators import ASCIIUsernameValidator
 from django.test import Client
 from django.test import TestCase
 from rest_framework.authtoken.models import Token
 
-from v2.models import FCMTokens, Friend
+from v2.models import FCMTokens, Friend, Photo
 from v2.views import check_params
 
 # Create your tests here.
@@ -17,6 +19,8 @@ auth_required_post_endpoints = ['send_alert', 'register_device', 'add_friend', '
 auth_required_get_endpoints = ['get_name', 'get_info']
 auth_required_delete_endpoints = ['delete_friend/friend', 'delete_user_data']
 auth_required_put_endpoints = ['edit', 'edit_friend_name']
+
+TEST_PHOTO_DIR: Final = settings.BASE_DIR / 'v2' / 'test_photos'
 
 
 class APIV2TestSuite(TestCase):
@@ -239,6 +243,7 @@ class APIV2TestSuite(TestCase):
         friend.received = 2
         friend.save()
         response = c.post('/v2/add_friend/', {'username': 'user2'}, HTTP_AUTHORIZATION=f'Token {self.token1}')
+        self.assertContains(response, '', status_code=200)
         friend = Friend.objects.get(owner__username='user1', friend__username='user2')
         self.assertFriendEqual(friend,
                                Friend(pk=friend.pk, owner=self.user1, friend=self.user2, sent=1, received=2,
@@ -412,11 +417,12 @@ class APIV2TestSuite(TestCase):
         self.assertEqual(get_user_model().objects.get(username='user1').last_name, 'last')
 
         password = get_user_model().objects.get(username='user1').password
+        # the password for user1 is now new_pass, so password will fail
         response = c.put('/v2/edit/', {'last_name': 'diff', 'first_name': 'diifff', 'password': 'won"t pass',
                                        'old_password': 'password'},
                          HTTP_AUTHORIZATION=f'Token {self.token1}',
                          content_type='application/json')
-        self.assertContains(response, '', status_code=403)
+        self.assertContains(response, '', status_code=401)
         self.assertEqual(get_user_model().objects.get(username='user1').first_name, 'first')
         self.assertEqual(get_user_model().objects.get(username='user1').last_name, 'last')
         self.assertEqual(get_user_model().objects.get(username='user1').password, password)
@@ -426,7 +432,7 @@ class APIV2TestSuite(TestCase):
         response = c.put('/v2/edit/', {'last_name': 'blljdf', 'first_name': 'adfqefedf fda', 'password': 'won"t pass'},
                          HTTP_AUTHORIZATION=f'Token {self.token1}',
                          content_type='application/json')
-        self.assertContains(response, '', status_code=400)
+        self.assertContains(response, '', status_code=400)  # no old_password parameter
         self.assertEqual(get_user_model().objects.get(username='user1').first_name, 'first')
         self.assertEqual(get_user_model().objects.get(username='user1').last_name, 'last')
         self.assertEqual(get_user_model().objects.get(username='user1').password, password)
@@ -441,23 +447,65 @@ class APIV2TestSuite(TestCase):
                          {'old_password': '', 'password': 'password'},
                          HTTP_AUTHORIZATION=f'Token {token3}',
                          content_type='application/json')
-        self.assertContains(response, '', status_code=403)
+        self.assertContains(response, '', status_code=401)  # password is new_pass
         response = c.put('/v2/edit/',
                          {'old_password': None, 'password': 'password'},
                          HTTP_AUTHORIZATION=f'Token {token3}',
                          content_type='application/json')
-        self.assertContains(response, '', status_code=403)
+        self.assertContains(response, '', status_code=401)  # password is new_pass
         response = c.put('/v2/edit/',
                          {'old_password': 'password', 'password': 'new_password'},
                          HTTP_AUTHORIZATION=f'Token {token3}',
                          content_type='application/json')
-        self.assertContains(response, '', status_code=403)
+        self.assertContains(response, '', status_code=401)  # password is new_pass
+
+    def test_photos(self):
+        with open(TEST_PHOTO_DIR / 'photo1.txt') as f:
+            self.verifyPhoto(self.user1, self.token1, f.read())
+        with open(TEST_PHOTO_DIR / 'photo2.txt') as f:
+            self.verifyPhoto(self.user1, self.token1, f.read())
+        temp_photo = Photo.objects.get(user=self.user1).photo
+        with open(TEST_PHOTO_DIR / 'photo3.txt') as f:
+            self.verifyPhoto(self.user2, self.token2, f.read())
+        self.assertEqual(Photo.objects.filter(user=self.user1).count(), 1)
+        self.assertEqual(Photo.objects.get(user=self.user1).photo, temp_photo,
+                         "Updating another user's photo should not impact existing photos")
+        with open(TEST_PHOTO_DIR / 'photo4.txt') as f:
+            self.verifyPhoto(self.user2, self.token2, f.read())
+        self.assertEqual(Photo.objects.filter(user=self.user1).count(), 1)
+        self.assertEqual(Photo.objects.get(user=self.user1).photo, temp_photo,
+                         "Updating another user's photo should not impact existing photos")
+        with open(TEST_PHOTO_DIR / 'photo5.txt') as f:
+            self.verifyPhoto(self.user2, self.token2, f.read())
+        self.assertEqual(Photo.objects.filter(user=self.user1).count(), 1)
+        self.assertEqual(Photo.objects.get(user=self.user1).photo, temp_photo,
+                         "Updating another user's photo should not impact existing photos")
+        temp_photo = Photo.objects.get(user=self.user2).photo
+        with open(TEST_PHOTO_DIR / 'gif.txt') as f:
+            self.verifyPhoto(self.user1, self.token1, f.read())
+        self.assertEqual(Photo.objects.filter(user=self.user2).count(), 1)
+        self.assertEqual(Photo.objects.get(user=self.user2).photo, temp_photo,
+                         "Updating another user's photo should not impact existing photos")
+
+        c = Client()  # this should return file too large
+        with open(TEST_PHOTO_DIR / 'decompression_bomb.txt') as f:
+            response = c.put('/v2/edit/',
+                             {'photo': f.read()},
+                             HTTP_AUTHORIZATION=f'Token {self.token2}',
+                             content_type='application/json')
+            self.assertContains(response, '', status_code=413)
+        self.assertEqual(Photo.objects.filter(user=self.user2).count(), 1)
+        self.assertEqual(Photo.objects.get(user=self.user2).photo, temp_photo,
+                         "Updating another user's photo should not impact existing photos")
 
     def test_get_user_info(self):
         # dump the user info, check it all matches
         c = Client()
 
-        user4 = get_user_model().objects.create_user(username='user4', password='my_password4', first_name='will', last_name='smith')
+        user4 = get_user_model().objects.create_user(username='user4',
+                                                     password='my_password4',
+                                                     first_name='will',
+                                                     last_name='smith')
         Friend.objects.create(owner=self.user2, friend=user4, deleted=True)
 
         response = c.get('/v2/get_info/', HTTP_AUTHORIZATION=f'Token {self.token2}')
@@ -468,6 +516,7 @@ class APIV2TestSuite(TestCase):
             'last_name': 'smith',
             'email': 'test@sample.verify',
             'password_login': True,
+            'photo': None,
             'friends': [
                 {
                     'friend': 'user1',
@@ -475,7 +524,8 @@ class APIV2TestSuite(TestCase):
                     'sent': 3,
                     'received': 0,
                     'last_message_id_sent': None,
-                    'last_message_status': None
+                    'last_message_status': None,
+                    'photo': None
                 }
             ]
         }, response.data['data'])
@@ -796,3 +846,18 @@ class APIV2TestSuite(TestCase):
         self.assertEqual(expected.name, actual.name)
         self.assertEqual(expected.received, actual.received)
         self.assertEqual(expected.deleted, actual.deleted)
+
+    def verifyPhoto(self, user, token, photo):
+        c = Client()
+        response = c.put('/v2/edit/', {'photo': photo},
+                         HTTP_AUTHORIZATION=f'Token {token}',
+                         content_type='application/json')
+        self.assertContains(response, '', status_code=200)
+        self.assertEqual(Photo.objects.filter(user=user).count(), 1)
+        photo_data = Photo.objects.get(user=user).photo
+        temp_photo: Image.Image = Image.open(io.BytesIO(base64.b64decode(photo_data)))
+        self.assertEqual(temp_photo.size, (Photo.PHOTO_SIZE, Photo.PHOTO_SIZE))
+        temp_photo.show()
+        Image.open(io.BytesIO(base64.b64decode(photo))).show()
+        response = c.get('/v2/get_info/', HTTP_AUTHORIZATION=f'Token {token}', content_type='application/json')
+        self.assertEqual(response.data['data']['photo'], photo_data)

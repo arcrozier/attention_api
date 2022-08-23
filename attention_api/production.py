@@ -181,3 +181,5 @@ REST_FRAMEWORK = {
         'anon': '50/day',
     }
 }
+
+IS_TESTING = False

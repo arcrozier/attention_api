@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/3.2/ref/settings/
 """
 import os
+import sys
 from pathlib import Path
 
 os.environ.setdefault('ATTENTION_API_KEY', 'django-insecure-e9q-4fjk_(--+=joxtbs$2d1km39!7!4_u15851pxjc0pu5e(k')
@@ -92,3 +93,11 @@ STATIC_URL = '/static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = production.REST_FRAMEWORK
+
+IS_TESTING = bool(set(sys.argv[:2]) & {"pytest", "test", "jenkins"}) and DEBUG
+
+# at the very very end, AFTER your settings are loaded:
+if IS_TESTING:
+    print('TESTING')
+    # override your rest framework settings in test mode
+    REST_FRAMEWORK["DEFAULT_THROTTLE_CLASSES"] = []
