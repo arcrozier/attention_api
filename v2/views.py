@@ -97,6 +97,8 @@ def register_user(request: Request) -> Response:
     password reset/MFA/account alerts.
     `tos_agree` must be "yes" (case-sensitive)
 
+    This endpoint cannot be called more than 50 times per day per IP - exceeding this limit will result in status 429
+
     Does not require authentication.
 
     If the username is already taken: returns status 400 with message "Username taken"
@@ -137,6 +139,8 @@ def google_oauth(request: Request) -> Response:
 
     Requires `user_id` - a Google userid
     If creating an account, requires `username` parameter
+
+    This endpoint cannot be called more than 50 times per day per IP - exceeding this limit will result in status 429
 
     Does not require authentication
 
@@ -348,9 +352,16 @@ def edit_user(request: Request) -> Response:
     /v2/edit/
     PUT: Updates the corresponding fields for the authenticated user.
 
-    Has 4 optional parameters: `first_name`, `last_name`, `email`, `password`, and `old_password`. If `password` is
-    provided, `old_password` must also be provided (returning status 400 if it is not), and it should be the password
-    the user currently has - otherwise, will return status 403.
+    Has 5 optional parameters: `first_name`, `last_name`, `email`, `photo`, `password`, and `old_password`.
+    If `password` is provided, `old_password` must also be provided (returning status 400 if it is not), and it should
+    be the password the user currently has - otherwise, will return status 401.
+
+    The photo should base-64 encoded. Remember that EXIF data is not saved when encoding in base 64 - the server will
+    not attempt to rotate the image.
+    If the image is too large (more than 178,956,970 pixels, to be precise), will return status 413.
+    The image will be resized and animations stripped. Transparency is preserved.
+
+    This endpoint cannot be called more than 5 times per hour per user - exceeding this limit will result in status 429
 
     Requires authentication.
 
@@ -527,6 +538,9 @@ def send_alert(request: Request) -> Response:
 
     Requires `to` and `message` to be set as parameters. If `message` is 'null', the app should display the default "no
     message" alert.
+
+    This endpoint cannot be called more than 15 times per minute per user - exceeding this limit will result in status
+    429
 
     Requires authentication.
 

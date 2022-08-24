@@ -96,7 +96,7 @@ REST_FRAMEWORK = production.REST_FRAMEWORK
 
 IS_TESTING = bool(set(sys.argv[:2]) & {"pytest", "test", "jenkins"}) and DEBUG
 
-# at the very very end, AFTER your settings are loaded:
+# We don't want to throttle while testing
 if IS_TESTING:
     print('TESTING')
     # override your rest framework settings in test mode
