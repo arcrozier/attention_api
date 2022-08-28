@@ -56,8 +56,8 @@ def register_device(request: Request) -> Response:
         with transaction.atomic():
             FCMTokens.objects.create(user=request.user, fcm_token=request.data['fcm_token'])
     except IntegrityError:
-        return Response(build_response(False, 'That token is already registered'), status=400)
-    return Response(build_response(True, 'Token successfully registered'), status=200)
+        return Response(build_response('That token is already registered'), status=400)
+    return Response(build_response('Token successfully registered'), status=200)
 
 
 @api_view(['POST'])
@@ -81,8 +81,8 @@ def unregister_device(request: Request) -> Response:
         with transaction.atomic():
             FCMTokens.objects.get(user=request.user, fcm_token=request.data['fcm_token']).delete()
     except FCMTokens.DoesNotExist:
-        return Response(build_response(False, 'That token is not registered'), status=400)
-    return Response(build_response(True, 'Token successfully unregistered'), status=200)
+        return Response(build_response('That token is not registered'), status=400)
+    return Response(build_response('Token successfully unregistered'), status=200)
 
 
 @api_view(['POST'])
@@ -109,10 +109,10 @@ def register_user(request: Request) -> Response:
     if not good:
         return response
     if request.data['tos_agree'] != 'yes':
-        return Response(build_response(False, 'You must agree to the terms of service to register an account'),
+        return Response(build_response('You must agree to the terms of service to register an account'),
                         status=400)
     if len(request.data['password']) < 8:
-        return Response(build_response(False, 'Password must be at least 8 characters'), status=400)
+        return Response(build_response('Password must be at least 8 characters'), status=400)
     try:
         if 'email' in request.data and request.data['email'] != '':
             validate_email(request.data.get('email'))
@@ -124,10 +124,10 @@ def register_user(request: Request) -> Response:
                                                  password=request.data['password'],
                                                  email=request.data.get('email'))
     except IntegrityError:
-        return Response(build_response(False, 'Username taken'), status=400)
+        return Response(build_response('Username taken'), status=400)
     except ValidationError as e:
-        return Response(build_response(False, e.message), status=400)
-    return Response(build_response(True, 'User created'), status=200)
+        return Response(build_response(e.message), status=400)
+    return Response(build_response('User created'), status=200)
 
 
 @api_view(['POST'])
@@ -178,17 +178,17 @@ def google_oauth(request: Request) -> Response:
                     token, _ = Token.objects.get_or_create(user=user_set.get())
                     return Response({'token': token})
                 else:
-                    return Response(build_response(success=False, message='Provide a username to create an account'),
+                    return Response(build_response(message='Provide a username to create an account'),
                                     status=401)
 
         except IntegrityError:
-            return Response(build_response(False, 'Username taken'), status=400)
+            return Response(build_response('Username taken'), status=400)
         except ValidationError as e:
-            return Response(build_response(False, e.message), status=400)
+            return Response(build_response(e.message), status=400)
 
     except ValueError:
         # Invalid token
-        return Response(build_response(False, 'Invalid Google token provided'), status=403)
+        return Response(build_response('Invalid Google token provided'), status=403)
 
 
 @api_view(['POST'])
@@ -212,11 +212,11 @@ def add_friend(request: Request) -> Response:
         friend = get_user_model().objects.get(username=request.data['username'])
         Friend.objects.update_or_create(owner=request.user, friend=friend, defaults={
             'deleted': False})
-        return Response(build_response(True, 'Successfully added/restored friend'), status=200)
+        return Response(build_response('Successfully added/restored friend'), status=200)
     except IntegrityError:
-        return Response(build_response(False, 'An error occurred when restoring friend'), status=400)
+        return Response(build_response('An error occurred when restoring friend'), status=400)
     except get_user_model().DoesNotExist:
-        return Response(build_response(False, 'User does not exist'), status=400)
+        return Response(build_response('User does not exist'), status=400)
 
 
 @api_view(['PUT'])
@@ -255,11 +255,11 @@ def edit_friend_name(request: Request) -> Response:
         if created:
             rel.deleted = True
             rel.save()
-        return Response(build_response(True, 'Successfully updated friend name'), status=200)
+        return Response(build_response('Successfully updated friend name'), status=200)
     except IntegrityError:
-        return Response(build_response(False, 'An error occurred when changing friend\'s name'), status=400)
+        return Response(build_response('An error occurred when changing friend\'s name'), status=400)
     except get_user_model().DoesNotExist:
-        return Response(build_response(False, 'An error occurred when restoring friend'), status=400)
+        return Response(build_response('An error occurred when restoring friend'), status=400)
 
 
 @api_view(['GET', 'HEAD'])
@@ -286,14 +286,14 @@ def get_friend_name(request: Request) -> Response:
         try:
             rel = Friend.objects.get(owner=request.user, friend=friend)
             if rel.name is not None:
-                return Response(build_response(True, 'Got name', {'name': rel.name}), status=200)
-            return Response(build_response(True, 'Got name', {'name': f'{friend.first_name} {friend.last_name}'}),
+                return Response(build_response('Got name', {'name': rel.name}), status=200)
+            return Response(build_response('Got name', {'name': f'{friend.first_name} {friend.last_name}'}),
                             status=200)
         except Friend.DoesNotExist:
-            return Response(build_response(True, 'Got name', {'name': f'{friend.first_name} {friend.last_name}'}),
+            return Response(build_response('Got name', {'name': f'{friend.first_name} {friend.last_name}'}),
                             status=200)
     except get_user_model().DoesNotExist:
-        return Response(build_response(False, "Couldn't find user"), status=400)
+        return Response(build_response("Couldn't find user"), status=400)
 
 
 @api_view(['DELETE'])
@@ -311,9 +311,9 @@ def delete_friend(request: Request, username) -> Response:
             friend = Friend.objects.select_for_update().get(owner=request.user, friend__username=username)
             friend.deleted = True
             friend.save()
-        return Response(build_response(True, 'Successfully deleted friend'), status=200)
+        return Response(build_response('Successfully deleted friend'), status=200)
     except Friend.DoesNotExist:
-        return Response(build_response(False, 'Could not delete friend as you were not friends'), status=400)
+        return Response(build_response('Could not delete friend as you were not friends'), status=400)
 
 
 @api_view(['DELETE'])
@@ -335,10 +335,10 @@ def delete_user_data(request: Request) -> Response:
 
     user = authenticate(username=request.data['username'], password=request.data['password'])
     if request.user.username != request.data['username'] or user is None:
-        return Response(build_response(False, 'Forbidden'), status=403)
+        return Response(build_response('Forbidden'), status=403)
 
     get_user_model().objects.get(username=request.user.username).delete()
-    return Response(build_response(True, 'Successfully deleted user data'), status=200)
+    return Response(build_response('Successfully deleted user data'), status=200)
 
 
 class EditUserThrottle(UserRateThrottle):
@@ -368,7 +368,7 @@ def edit_user(request: Request) -> Response:
     Returns no data.
     """
     if 'password' in request.data and 'old_password' not in request.data:
-        return Response(build_response(False, 'To update password, provide old password'), status=400)
+        return Response(build_response('To update password, provide old password'), status=400)
     invalid_field = ''
     try:
         with transaction.atomic():
@@ -421,15 +421,15 @@ def edit_user(request: Request) -> Response:
                 photo.save()
     except (ValidationError, UnidentifiedImageError, ValueError) as e:
         logger.info(str(e))
-        return Response(build_response(False, f'Could not update user: invalid value for {invalid_field}: {e}'),
+        return Response(build_response(f'Could not update user: invalid value for {invalid_field}: {e}'),
                         status=400)
     except PermissionDenied:
-        return Response(build_response(False, 'Incorrect old password'), status=401)
+        return Response(build_response('Incorrect old password'), status=401)
     except IntegrityError:
-        return Response(build_response(False, 'Username or email address in use'), status=400)
+        return Response(build_response('Username or email address in use'), status=400)
     except DecompressionBombError:
-        return Response(build_response(False, 'Profile picture was too large'), status=413)
-    return Response(build_response(True, 'User updated successfully'), status=200)
+        return Response(build_response('Profile picture was too large'), status=413)
+    return Response(build_response('User updated successfully'), status=200)
 
 
 @api_view(['POST'])
@@ -455,7 +455,7 @@ def link_google_account(request: Request) -> Response:
 
     check_pass = authenticate(username=request.user.username, password=request.data['password'])
     if check_pass is None:
-        return Response(build_response(False, 'Incorrect old password'), status=403)
+        return Response(build_response('Incorrect old password'), status=403)
 
     try:
         with transaction.atomic():
@@ -469,11 +469,11 @@ def link_google_account(request: Request) -> Response:
             user.save()
 
     except ValueError:
-        return Response(build_response(False, 'Invalid Google account'), status=403)
+        return Response(build_response('Invalid Google account'), status=403)
     except IntegrityError:
-        return Response(build_response(False, 'Google account is already linked to another account'), status=400)
+        return Response(build_response('Google account is already linked to another account'), status=400)
 
-    return Response(build_response(True, 'Google account linked successfully'), status=200)
+    return Response(build_response('Google account linked successfully'), status=200)
 
 
 @api_view(['GET', 'HEAD'])
@@ -521,7 +521,7 @@ def get_user_info(request: Request) -> Response:
         'photo': user.photo.photo if hasattr(user, 'photo') else None,
         'friends': friends,
     }
-    return Response(build_response(True, 'Got user data', data=data), status=200)
+    return Response(build_response('Got user data', data=data), status=200)
 
 
 class AlertThrottle(UserRateThrottle):
@@ -570,12 +570,12 @@ def send_alert(request: Request) -> Response:
         friend.last_sent_message_status = Friend.SENT
         friend.save()
     except Friend.DoesNotExist:
-        return Response(build_response(False, f'Could not send message as {to} does not have you as a friend'),
+        return Response(build_response(f'Could not send message as {to} does not have you as a friend'),
                         status=403)
 
     tokens: QuerySet = FCMTokens.objects.filter(user__username=to)
     if not bool(tokens):
-        return Response(build_response(False, f'Could not find devices belong to user {to}'), status=400)
+        return Response(build_response(f'Could not find devices belong to user {to}'), status=400)
     try:
         firebase_admin.initialize_app()
     except ValueError:
@@ -607,8 +607,8 @@ def send_alert(request: Request) -> Response:
             token.delete()
 
     if not at_least_one_success:
-        return Response(build_response(False, f"Unable to send message"), status=400)
-    return Response(build_response(True, "Successfully sent message", data={'id': alert_id}), status=200)
+        return Response(build_response(f"Unable to send message"), status=400)
+    return Response(build_response("Successfully sent message", data={'id': alert_id}), status=200)
 
 
 @api_view(['POST'])
@@ -636,15 +636,15 @@ def alert_delivered(request: Request) -> Response:
                 friend.last_sent_message_status = Friend.DELIVERED
                 friend.save()
             else:
-                return Response(build_response(True, "Message was already read or delivered"))
+                return Response(build_response("Message was already read or delivered"))
     except Friend.DoesNotExist:
-        return Response(build_response(True, "Delivered message was not the last sent"))
+        return Response(build_response("Delivered message was not the last sent"))
 
     tokens: QuerySet = FCMTokens.objects.filter(user__username=request.data['from'])
 
     if not bool(tokens):
         logger.warning("Could not find tokens for recipient")
-        return Response(build_response(False, f'An error occurred'), status=500)
+        return Response(build_response(f'An error occurred'), status=500)
     try:
         firebase_admin.initialize_app()
     except ValueError:
@@ -673,8 +673,8 @@ def alert_delivered(request: Request) -> Response:
             token.delete()
 
     if not at_least_one_success:
-        return Response(build_response(False, f"Unable to send delivery status"), status=400)
-    return Response(build_response(True, "Successfully sent delivery status"), status=200)
+        return Response(build_response(f"Unable to send delivery status"), status=400)
+    return Response(build_response("Successfully sent delivery status"), status=200)
 
 
 @api_view(['POST'])
@@ -702,16 +702,16 @@ def alert_read(request: Request) -> Response:
                 friend.last_sent_message_status = Friend.READ
                 friend.save()
             else:
-                return Response(build_response(True, "Message was already read"))
+                return Response(build_response("Message was already read"))
     except Friend.DoesNotExist:
-        return Response(build_response(True, "Read message was not the last sent"))
+        return Response(build_response("Read message was not the last sent"))
 
     tokens: QuerySet = FCMTokens.objects.filter(user__username=request.user.username).exclude(fcm_token=request.data[
         'fcm_token']).union(FCMTokens.objects.filter(user__username=request.data['from']))
 
     if not bool(tokens):
         logger.warning("Could not find tokens for recipient or the users' other devices")
-        return Response(build_response(False, f'An error occurred'), status=500)
+        return Response(build_response(f'An error occurred'), status=500)
     try:
         firebase_admin.initialize_app()
     except ValueError:
@@ -740,8 +740,8 @@ def alert_read(request: Request) -> Response:
             token.delete()
 
     if not at_least_one_success:
-        return Response(build_response(False, f"Unable to send read status"), status=400)
-    return Response(build_response(True, "Successfully sent read status"), status=200)
+        return Response(build_response(f"Unable to send read status"), status=400)
+    return Response(build_response("Successfully sent read status"), status=200)
 
 
 def check_params(expected: list, holder: Dict) -> Tuple[bool, Response]:
@@ -749,14 +749,13 @@ def check_params(expected: list, holder: Dict) -> Tuple[bool, Response]:
     for expect in expected:
         if expect not in holder:
             missing.append(expect)
-    response = Response(build_response(False, f"Missing required parameter(s): {', '.join(missing)}"),
+    response = Response(build_response(f"Missing required parameter(s): {', '.join(missing)}"),
                         status=400) if len(missing) != 0 else Response()
     return len(missing) == 0, response
 
 
-def build_response(success: bool, message: str, data: Any = None, string: bool = False) -> dict:
+def build_response(message: str, data: Any = None, string: bool = False) -> dict:
     response = {
-        "success": success,
         "message": message,
         "data": data
     }
