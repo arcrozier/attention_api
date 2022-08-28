@@ -195,8 +195,8 @@ def google_oauth(request: Request) -> Response:
 def add_friend(request: Request) -> Response:
     """
     /v2/add_friend/
-    POST: Adds a user as a friend of the authenticated user. This allows the other user to send messages to the authenticated
-    user, but not the other way around (unless that user adds this user as a friend).
+    POST: Adds a user as a friend of the authenticated user. This allows the other user to send messages to the
+    authenticated user, but not the other way around (unless that user adds this user as a friend).
 
     Requires the `username` parameter to be set.
 
@@ -478,7 +478,6 @@ def link_google_account(request: Request) -> Response:
 
 @api_view(['GET', 'HEAD'])
 def get_user_info(request: Request) -> Response:
-    # TODO return profile pictures with each friend and the user's own profile picture
     """
     /v2/get_info/
     GET: Returns a data dump based on the user used to authenticate.
@@ -490,19 +489,20 @@ def get_user_info(request: Request) -> Response:
     On success, returns the following in the data field:
     {
         username: <user's username>,
-        first_name: <user's first name>,
-        last_name: <user's last name>,
-        email: <user's email>,
+        first_name: <user's first name or null>,
+        last_name: <user's last name or null>,
+        email: <user's email or null>,
         password_login: <boolean: true if user uses password for login, false if they use Google>,
-        photo: <user's profile photo>,
+        photo: <user's profile photo, base64 encoded, RGBA-8888, or null if not set>,
         friends: [
             {
                 friend: <friend's username>,
-                name: <friend's name>,
+                name: <friend's name or null>,
                 sent: <number of messages sent to friend>,
                 received: <number of messages received from friend>,
-                last_message_id_sent: <the last alert id that was sent to this friend>,
-                last_message_read: <whether the last message was read or not>
+                last_message_id_sent: <the last alert id that was sent to this friend or null>,
+                last_message_read: <whether the last message was read or not>,
+                photo: <friend's profile photo, base64 encoded, RGBA-8888, or null if not set>
             },
             ...
         ]
