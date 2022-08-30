@@ -501,7 +501,8 @@ class APIV2TestSuite(TestCase):
         self.assertEqual(Photo.objects.get(user=self.user2).photo, temp_photo,
                          "Updating another user's photo should not impact existing photos")
 
-        c = Client()  # this should return file too large
+        c = Client()  # this should return file too large (file exceeds ~200 megapixel limit without exceeding 20 MB
+        # limit)
         with open(TEST_PHOTO_DIR / 'decompression_bomb.txt') as f:
             response = c.put('/v2/edit/',
                              {'photo': f.read()},
@@ -510,7 +511,18 @@ class APIV2TestSuite(TestCase):
             self.assertContains(response, '', status_code=413)
         self.assertEqual(Photo.objects.filter(user=self.user2).count(), 1)
         self.assertEqual(Photo.objects.get(user=self.user2).photo, temp_photo,
-                         "Updating another user's photo should not impact existing photos")
+                         "A failed update should not change the photo")
+
+        # this file exceeds the 20 MB limit
+        with open(TEST_PHOTO_DIR / 'too_large.txt') as f:
+            response = c.put('/v2/edit/',
+                             {'photo': f.read()},
+                             HTTP_AUTHORIZATION=f'Token {self.token2}',
+                             content_type=get_content_type())
+            self.assertContains(response, '', status_code=400)
+        self.assertEqual(Photo.objects.filter(user=self.user2).count(), 1)
+        self.assertEqual(Photo.objects.get(user=self.user2).photo, temp_photo,
+                         "A failed update should not change the photo")
 
     def test_get_user_info(self):
         # dump the user info, check it all matches
@@ -879,13 +891,5 @@ class APIV2TestSuite(TestCase):
         self.assertEqual(response.data['data']['photo'], photo_data)
 
 
-last_content_type_json = False
-
-
 def get_content_type():
-    global last_content_type_json
-    last_content_type_json = not last_content_type_json
-    if last_content_type_json:
-        return MULTIPART_CONTENT
-    else:
-        return 'application/json'
+    return 'application/json'
