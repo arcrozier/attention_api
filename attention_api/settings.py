@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/3.2/ref/settings/
 """
 import os
+import sys
 from pathlib import Path
 
 os.environ.setdefault('ATTENTION_API_KEY', 'django-insecure-e9q-4fjk_(--+=joxtbs$2d1km39!7!4_u15851pxjc0pu5e(k')
@@ -31,12 +32,12 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
-AUTH_USER_MODEL = production.AUTH_USER_MODEL
-
 
 # Application definition
 
 INSTALLED_APPS = production.INSTALLED_APPS
+
+AUTH_USER_MODEL = production.AUTH_USER_MODEL
 
 MIDDLEWARE = production.MIDDLEWARE
 
@@ -86,9 +87,19 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 
+DATA_UPLOAD_MAX_MEMORY_SIZE = production.DATA_UPLOAD_MAX_MEMORY_SIZE
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/3.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = production.REST_FRAMEWORK
+
+IS_TESTING = bool(set(sys.argv[:2]) & {"pytest", "test", "jenkins"}) and DEBUG
+
+# We don't want to throttle while testing
+if IS_TESTING:
+    print('TESTING')
+    # override your rest framework settings in test mode
+    REST_FRAMEWORK["DEFAULT_THROTTLE_CLASSES"] = []

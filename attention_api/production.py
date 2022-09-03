@@ -30,8 +30,6 @@ DB_NAME = 'attention'
 DB_USER = os.getenv('ATTENTION_API_DB_USER', 'NOT FOUND')
 DB_PASS = os.getenv('ATTENTION_API_DB_PASS', 'NOT FOUND')
 
-AUTH_USER_MODEL = 'v2.User'
-
 
 # Application definition
 INSTALLED_APPS = [
@@ -45,6 +43,8 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'v2.apps.V2Config'
 ]
+
+AUTH_USER_MODEL = 'v2.User'
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -155,7 +155,9 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/3.2/howto/static-files/
 
 STATIC_URL = '/static/'
-STATIC_ROOT = '/var/www/static'
+STATIC_ROOT = '/var/www/attention/static'
+
+DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/3.2/ref/settings/#default-auto-field
@@ -167,11 +169,24 @@ REST_FRAMEWORK = {
         'rest_framework.renderers.JSONRenderer',
         'rest_framework.renderers.BrowsableAPIRenderer'
     ],
+    'DEFAULT_PARSER_CLASSES': [
+        'attention_api.parsers.LimitedJSONParser',
+        'attention_api.parsers.LimitedFormParser',
+        'attention_api.parsers.LimitedMultiPartParser'
+    ],
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.SessionAuthentication',
         'rest_framework.authentication.TokenAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
-    ]
+    ],
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '50/day',
+    }
 }
+
+IS_TESTING = False
