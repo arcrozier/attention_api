@@ -176,7 +176,7 @@ def google_oauth(request: Request) -> Response:
                     user.save()
                 if user_set or 'username' in request.data:
                     token, _ = Token.objects.get_or_create(user=user_set.get())
-                    return Response({'token': token})
+                    return Response({'token': token.key})
                 else:
                     return Response(build_response(message='Provide a username to create an account'),
                                     status=401)
