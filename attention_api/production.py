@@ -40,7 +40,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
-    'rest_framework.authtoken',
+    'knox',
     'v2.apps.V2Config'
 ]
 
@@ -176,7 +176,7 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.SessionAuthentication',
-        'rest_framework.authentication.TokenAuthentication',
+        'knox.auth.TokenAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
@@ -187,6 +187,16 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'anon': '50/day',
     }
+}
+
+REST_KNOX = {
+  'TOKEN_TTL': None,
+  'USER_SERIALIZER': 'knox.serializers.UserSerializer',
+  'TOKEN_LIMIT_PER_USER': 10,
+  'AUTO_REFRESH': True,
+  'MIN_REFRESH_INTERVAL': 60,  # TODO make sure using the token still updates this
+  'AUTH_HEADER_PREFIX': 'Bearer',
+  'TOKEN_MODEL': 'knox.AuthToken',
 }
 
 IS_TESTING = False

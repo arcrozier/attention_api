@@ -27,11 +27,31 @@ from rest_framework.response import Response
 from PIL import Image, UnidentifiedImageError
 from rest_framework.throttling import UserRateThrottle
 
+from django.contrib.auth import login
+
+from rest_framework import permissions
+from rest_framework.authtoken.serializers import AuthTokenSerializer
+from knox.views import LoginView as KnoxLoginView
+from knox import views as knox_views
+
 from v2.models import FCMTokens, Friend, Photo
 
 logger = logging.getLogger(__name__)
 
 CLIENT_ID = '357995852275-tcfjuvtbrk3c57t5gsuc9a9jdfdn137s.apps.googleusercontent.com'
+
+
+class LoginView(KnoxLoginView):
+    permission_classes = (permissions.AllowAny,)
+
+    def post(self, request, format=None):
+        serializer = AuthTokenSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data['user']
+        login(request, user)
+        # TODO test what happens when the user runs out of tokens
+        # TODO we want to replace the oldest token with a new one and return that
+        return super(LoginView, self).post(request, format=None)
 
 
 @api_view(['POST'])
@@ -65,11 +85,14 @@ def unregister_device(request: Request) -> Response:
     """
     POST: Registers a device for receiving alerts for an account.
 
+    Even when this endpoint returns an error, the token may have been deleted anyway - users should not assume that a
+    failure means the token is still valid, and should instead re-register if they wish the device to receive alerts
+
     Requires `fcm_token` parameter to be set to the Firebase Cloud Messaging token to use for that device
 
     Requires authentication.
 
-    Returns status 400 if the token is already registered to the account
+    Returns status 400 if the token is not registered to the account
     Returns status 200 otherwise
     No data is returned.
     """
@@ -82,7 +105,10 @@ def unregister_device(request: Request) -> Response:
             FCMTokens.objects.get(user=request.user, fcm_token=request.data['fcm_token']).delete()
     except FCMTokens.DoesNotExist:
         return Response(build_response('That token is not registered'), status=400)
-    return Response(build_response('Token successfully unregistered'), status=200)
+    response: Response = knox_views.LogoutView.as_view()(request)
+    if response.status_code != 200:
+        return response
+    return Response(build_response('Token successfully unregistered and logged out'), status=200)
 
 
 @api_view(['POST'])

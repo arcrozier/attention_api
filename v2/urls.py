@@ -14,19 +14,21 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.urls import path
+from knox import views as knox_views
 
 from . import views
-from rest_framework.authtoken import views as auth_views
+from .views import LoginView
 
 urlpatterns = [
     # POST: requires valid `username` and `password` parameters. Returns
     # { 'token' : '<token>' }
-    path('api_token_auth/', auth_views.obtain_auth_token),
+    path(r'login/', LoginView.as_view(), name='knox_login'),
+    path(r'logout/', views.unregister_device, name='knox_logout'),
+    path(r'logoutall/', knox_views.LogoutAllView.as_view(), name='knox_logoutall'),
     path('google_auth/', views.google_oauth),
     path('link_google_account/', views.link_google_account),
     path('send_alert/', views.send_alert),
     path('register_device/', views.register_device),
-    path('unregister_device/', views.unregister_device),
     path('register_user/', views.register_user),
     path('add_friend/', views.add_friend),
     path('get_name/', views.get_friend_name),

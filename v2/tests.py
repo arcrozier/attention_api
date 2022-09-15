@@ -27,6 +27,7 @@ TEST_PHOTO_DIR: Final = settings.BASE_DIR / 'v2' / 'test_photos'
 class APIV2TestSuite(TestCase):
 
     def setUp(self):
+        # TODO lots of changes needed here
         self.user1 = get_user_model().objects.create_user(username='user1', password='my_password',
                                                           first_name='poppin', last_name='pippin')
         self.user2 = get_user_model().objects.create_user(username='user2', password='my_password2', first_name='will',

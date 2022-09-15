@@ -96,6 +96,8 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = production.REST_FRAMEWORK
 
+REST_KNOX = production.REST_KNOX
+
 IS_TESTING = bool(set(sys.argv[:2]) & {"pytest", "test", "jenkins"}) and DEBUG
 
 # We don't want to throttle while testing
