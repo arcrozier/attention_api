@@ -388,7 +388,7 @@ def edit_user(request: Request) -> Response:
                 user.email = request.data['email']
             if 'photo' in request.data:
                 invalid_field = 'photo'
-                temp_image: Image.Image = Image.open(io.BytesIO(base64.b64decode(request.data['photo'])))
+                temp_image: Image.Image = Image.open(io.BytesIO(request.data['photo']))
                 if temp_image.width > temp_image.height:
                     # image is wider than it is tall - size should be (128 * aspect ratio, 128)
                     size = ((Photo.PHOTO_SIZE * temp_image.width) // temp_image.height, Photo.PHOTO_SIZE)
