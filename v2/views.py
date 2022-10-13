@@ -138,7 +138,7 @@ def google_oauth(request: Request) -> Response:
     POST: Logs in the user with the provided Google user id token
 
     Requires `user_id` - a Google userid
-    If creating an account, requires `username` parameter
+    If creating an account, requires `username` parameter and `tos_agree`
 
     This endpoint cannot be called more than 50 times per day per IP - exceeding this limit will result in status 429
 
@@ -166,6 +166,8 @@ def google_oauth(request: Request) -> Response:
         try:
             with transaction.atomic():
                 if 'username' in request.data:
+                    if 'tos_agree' not in request.data or request.data['tos_agree'] != 'yes':
+                        raise ValidationError('you must agree to terms of service')
                     ASCIIUsernameValidator()(request.data['username'])
                     user = get_user_model().objects.create_user(first_name=first_name,
                                                                 last_name=last_name,
@@ -395,7 +397,7 @@ def edit_user(request: Request) -> Response:
                 else:
                     # image is taller than it is wide - size should be (128, 128 * aspect ratio)
                     size = (Photo.PHOTO_SIZE, (Photo.PHOTO_SIZE * temp_image.height) // temp_image.width)
-                temp_image = temp_image.resize(size=size, resample=Image.Resampling.LANCZOS)\
+                temp_image = temp_image.resize(size=size, resample=Image.Resampling.LANCZOS) \
                     .crop(box=((size[0] - Photo.PHOTO_SIZE) // 2,  # we get the 128 x 128 square in the middle
                                (size[1] - Photo.PHOTO_SIZE) // 2,
                                (size[0] + Photo.PHOTO_SIZE) // 2,
@@ -510,8 +512,8 @@ def get_user_info(request: Request) -> Response:
     """
     user = request.user
     friends = [flatten_friend(x) for x in Friend.objects
-               .select_related('friend__photo')
-               .filter(owner=user, deleted=False)]
+        .select_related('friend__photo')
+        .filter(owner=user, deleted=False)]
     data = {
         'username': user.username,
         'first_name': user.first_name,
