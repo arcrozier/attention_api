@@ -24,7 +24,7 @@ from rest_framework.decorators import api_view, permission_classes, throttle_cla
 from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, UnidentifiedImageError, ImageOps
 from rest_framework.throttling import UserRateThrottle
 
 from v2.models import FCMTokens, Friend, Photo
@@ -390,7 +390,7 @@ def edit_user(request: Request) -> Response:
                 user.email = request.data['email']
             if 'photo' in request.data:
                 invalid_field = 'photo'
-                temp_image: Image.Image = Image.open(io.BytesIO(request.data['photo']))
+                temp_image: Image.Image = Image.open(request.data['photo'])
                 if temp_image.width > temp_image.height:
                     # image is wider than it is tall - size should be (128 * aspect ratio, 128)
                     size = ((Photo.PHOTO_SIZE * temp_image.width) // temp_image.height, Photo.PHOTO_SIZE)
@@ -402,8 +402,9 @@ def edit_user(request: Request) -> Response:
                                (size[1] - Photo.PHOTO_SIZE) // 2,
                                (size[0] + Photo.PHOTO_SIZE) // 2,
                                (size[1] + Photo.PHOTO_SIZE) // 2))
+                temp_image = ImageOps.exif_transpose(temp_image)
                 buffered = io.BytesIO()
-                temp_image.save(buffered, format='PNG')
+                temp_image.save(buffered, format='PNG', exif=temp_image.getexif())
                 photo, _ = Photo.objects.update_or_create(user=user, defaults={
                     'photo': base64.b64encode(buffered.getvalue()).decode()})
             if 'password' in request.data:
