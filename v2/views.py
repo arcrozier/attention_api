@@ -358,10 +358,10 @@ def edit_user(request: Request) -> Response:
     If `password` is provided, `old_password` must also be provided (returning status 400 if it is not), and it should
     be the password the user currently has - otherwise, will return status 401.
 
-    The photo should base-64 encoded. Remember that EXIF data is not saved when encoding in base 64 - the server will
-    not attempt to rotate the image.
+    The photo should be uploaded in its binary format. EXIF rotation data is applied, but other metadata is stripped.
     If the image is too large (more than 178,956,970 pixels, to be precise), will return status 413.
     The image will be resized and animations stripped. Transparency is preserved.
+    Invalid file types will return status 400.
 
     This endpoint cannot be called more than 5 times per hour per user - exceeding this limit will result in status 429
 
@@ -369,16 +369,45 @@ def edit_user(request: Request) -> Response:
 
     Returns no data.
     """
-    if 'password' in request.data and 'old_password' not in request.data:
-        return Response(build_response('To update password, provide old password'), status=400)
-    invalid_field = ''
+    invalid_fields = {}
+    if 'username' in request.data:
+        try:
+            ASCIIUsernameValidator()(request.data['username'])
+        except ValidationError as e:
+            invalid_fields['username'] = e.message
+
+    if 'email' in request.data:
+        try:
+            validate_email(request.data['email'])
+        except ValidationError as e:
+            invalid_fields['email'] = e.message
+
+    if 'password' in request.data:
+        if 'old_password' not in request.data:
+            invalid_fields['old_password'] = 'to update password, `old_password` must be provided'
+        elif len(request.data['password']) < 8:
+            invalid_fields['password'] = 'password must be at least 8 characters'
+
+    temp_image = None
+    if 'photo' in request.data:
+        try:
+            temp_image: Image.Image | None = Image.open(request.data['photo'])
+        except DecompressionBombError:
+            return Response(build_response('Profile picture was too large'), status=413)
+        except UnidentifiedImageError as e:
+            invalid_fields['photo'] = e.strerror
+
+    if len(invalid_fields) != 0:
+        message = ', '.join([f'{x} ({invalid_fields[x]})' for x in invalid_fields])
+        logger.info(message)
+        return Response(build_response(
+            f'Could not update user: invalid value{"s" if len(invalid_fields) > 0 else ""} for {message}'), status=400)
     try:
         with transaction.atomic():
             photo = None
             user = get_user_model().objects.select_for_update().get(username=request.user.username)
             if 'username' in request.data:
                 invalid_field = 'username'
-                ASCIIUsernameValidator()(request.data['username'])
                 user.username = request.data['username']
             if 'first_name' in request.data:
                 user.first_name = request.data['first_name']
@@ -386,11 +415,8 @@ def edit_user(request: Request) -> Response:
                 user.last_name = request.data['last_name']
             if 'email' in request.data:
                 invalid_field = 'email'
-                validate_email(request.data['email'])
                 user.email = request.data['email']
-            if 'photo' in request.data:
-                invalid_field = 'photo'
-                temp_image: Image.Image = Image.open(request.data['photo'])
+            if temp_image is not None:
                 if temp_image.width > temp_image.height:
                     # image is wider than it is tall - size should be (128 * aspect ratio, 128)
                     size = ((Photo.PHOTO_SIZE * temp_image.width) // temp_image.height, Photo.PHOTO_SIZE)
@@ -408,28 +434,22 @@ def edit_user(request: Request) -> Response:
                 photo, _ = Photo.objects.update_or_create(user=user, defaults={
                     'photo': base64.b64encode(buffered.getvalue()).decode()})
             if 'password' in request.data:
-                if len(request.data['password']) >= 8:
-                    check_pass = authenticate(username=request.user.username, password=request.data['old_password'])
-                    if check_pass is not None:
-                        user.set_password(request.data['password'])
-                        Token.objects.get(user=user).delete()
-                        FCMTokens.objects.filter(user=user).delete()
-                    else:
-                        raise PermissionDenied('Invalid password')
+                assert(len(request.data['password']) >= 8)
+                assert('old_password' in request.data)
+                check_pass = authenticate(username=request.user.username, password=request.data['old_password'])
+                if check_pass is not None:
+                    user.set_password(request.data['password'])
+                    Token.objects.get(user=user).delete()
+                    FCMTokens.objects.filter(user=user).delete()
                 else:
-                    invalid_field = 'password'
-                    raise ValidationError('Password was not long enough')
+                    raise PermissionDenied('Invalid password')
             user.save()
             if photo is not None:
                 photo.save()
-    except (ValidationError, UnidentifiedImageError, ValueError) as e:
-        logger.info(str(e))
-        return Response(build_response(f'Could not update user: invalid value for {invalid_field}: {e}'),
-                        status=400)
     except PermissionDenied:
         return Response(build_response('Incorrect old password'), status=401)
     except IntegrityError:
-        return Response(build_response('Username or email address in use'), status=400)
+        return Response(build_response(f'{invalid_field} in use'), status=400)
     except DecompressionBombError:
         return Response(build_response('Profile picture was too large'), status=413)
     return Response(build_response('User updated successfully'), status=200)

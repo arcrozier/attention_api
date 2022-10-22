@@ -530,6 +530,28 @@ class APIV2TestSuite(TestCase):
         self.assertEqual(Photo.objects.get(user=self.user2).photo, temp_photo,
                          "A failed update should not change the photo")
 
+        # this file isn't a photo
+        with open(TEST_PHOTO_DIR / 'not_a_photo.txt', 'rb') as f:
+            response = c.put('/v2/edit/',
+                             {'photo': f},
+                             HTTP_AUTHORIZATION=f'Token {self.token2}',
+                             format='multipart')
+            self.assertContains(response, '', status_code=400)
+        self.assertEqual(Photo.objects.filter(user=self.user2).count(), 1)
+        self.assertEqual(Photo.objects.get(user=self.user2).photo, temp_photo,
+                         "A failed update should not change the photo")
+
+        # this file isn't a photo
+        with open(TEST_PHOTO_DIR / 'not_a_photo.png', 'rb') as f:
+            response = c.put('/v2/edit/',
+                             {'photo': f},
+                             HTTP_AUTHORIZATION=f'Token {self.token2}',
+                             format='multipart')
+            self.assertContains(response, '', status_code=400)
+        self.assertEqual(Photo.objects.filter(user=self.user2).count(), 1)
+        self.assertEqual(Photo.objects.get(user=self.user2).photo, temp_photo,
+                         "A failed update should not change the photo")
+
     def test_get_user_info(self):
         # dump the user info, check it all matches
         c = Client()
