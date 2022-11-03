@@ -7,9 +7,9 @@ from PIL import Image
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import Client
-from django.test.client import MULTIPART_CONTENT
 from django.test import TestCase
 from rest_framework.authtoken.models import Token
+from rest_framework.test import APIClient
 
 from v2.models import FCMTokens, Friend, Photo
 from v2.views import check_params
@@ -474,51 +474,79 @@ class APIV2TestSuite(TestCase):
         self.assertContains(response, '', status_code=401)  # password is new_pass
 
     def test_photos(self):
-        with open(TEST_PHOTO_DIR / 'photo1.txt') as f:
-            self.verifyPhoto(self.user1, self.token1, f.read())
-        with open(TEST_PHOTO_DIR / 'photo2.txt') as f:
-            self.verifyPhoto(self.user1, self.token1, f.read())
+        with open(TEST_PHOTO_DIR / 'photo1.JPG', 'rb') as f:
+            self.verifyPhoto(self.user1, self.token1, f)
+        with open(TEST_PHOTO_DIR / 'photo2.JPG', 'rb') as f:
+            self.verifyPhoto(self.user1, self.token1, f)
         temp_photo = Photo.objects.get(user=self.user1).photo
-        with open(TEST_PHOTO_DIR / 'photo3.txt') as f:
-            self.verifyPhoto(self.user2, self.token2, f.read())
+        with open(TEST_PHOTO_DIR / 'photo3.JPG', 'rb') as f:
+            self.verifyPhoto(self.user2, self.token2, f)
         self.assertEqual(Photo.objects.filter(user=self.user1).count(), 1)
         self.assertEqual(Photo.objects.get(user=self.user1).photo, temp_photo,
                          "Updating another user's photo should not impact existing photos")
-        with open(TEST_PHOTO_DIR / 'photo4.txt') as f:
-            self.verifyPhoto(self.user2, self.token2, f.read())
+        with open(TEST_PHOTO_DIR / 'photo4.jpg', 'rb') as f:
+            self.verifyPhoto(self.user2, self.token2, f)
         self.assertEqual(Photo.objects.filter(user=self.user1).count(), 1)
         self.assertEqual(Photo.objects.get(user=self.user1).photo, temp_photo,
                          "Updating another user's photo should not impact existing photos")
-        with open(TEST_PHOTO_DIR / 'photo5.txt') as f:
-            self.verifyPhoto(self.user2, self.token2, f.read())
+        with open(TEST_PHOTO_DIR / 'photo5.JPG', 'rb') as f:
+            self.verifyPhoto(self.user2, self.token2, f)
         self.assertEqual(Photo.objects.filter(user=self.user1).count(), 1)
         self.assertEqual(Photo.objects.get(user=self.user1).photo, temp_photo,
                          "Updating another user's photo should not impact existing photos")
         temp_photo = Photo.objects.get(user=self.user2).photo
-        with open(TEST_PHOTO_DIR / 'gif.txt') as f:
-            self.verifyPhoto(self.user1, self.token1, f.read())
+        with open(TEST_PHOTO_DIR / 'gif.gif', 'rb') as f:
+            self.verifyPhoto(self.user1, self.token1, f)
+        self.assertEqual(Photo.objects.filter(user=self.user2).count(), 1)
+        self.assertEqual(Photo.objects.get(user=self.user2).photo, temp_photo,
+                         "Updating another user's photo should not impact existing photos")
+        with open(TEST_PHOTO_DIR / 'small_gif.gif', 'rb') as f:
+            self.verifyPhoto(self.user1, self.token1, f)
         self.assertEqual(Photo.objects.filter(user=self.user2).count(), 1)
         self.assertEqual(Photo.objects.get(user=self.user2).photo, temp_photo,
                          "Updating another user's photo should not impact existing photos")
 
-        c = Client()  # this should return file too large (file exceeds ~200 megapixel limit without exceeding 20 MB
+        c = APIClient()  # this should return file too large (file exceeds ~200 megapixel limit without exceeding 20 MB
         # limit)
-        with open(TEST_PHOTO_DIR / 'decompression_bomb.txt') as f:
+        with open(TEST_PHOTO_DIR / 'decompression_bomb.png', 'rb') as f:
             response = c.put('/v2/edit/',
-                             {'photo': f.read()},
+                             {'photo': f},
                              HTTP_AUTHORIZATION=f'Token {self.token2}',
-                             content_type=get_content_type())
+                             format='multipart')
+            print(response.data)
             self.assertContains(response, '', status_code=413)
         self.assertEqual(Photo.objects.filter(user=self.user2).count(), 1)
         self.assertEqual(Photo.objects.get(user=self.user2).photo, temp_photo,
                          "A failed update should not change the photo")
 
         # this file exceeds the 20 MB limit
-        with open(TEST_PHOTO_DIR / 'too_large.txt') as f:
+        with open(TEST_PHOTO_DIR / 'too_large.png', 'rb') as f:
             response = c.put('/v2/edit/',
-                             {'photo': f.read()},
+                             {'photo': f},
                              HTTP_AUTHORIZATION=f'Token {self.token2}',
-                             content_type=get_content_type())
+                             format='multipart')
+            self.assertContains(response, '', status_code=400)
+        self.assertEqual(Photo.objects.filter(user=self.user2).count(), 1)
+        self.assertEqual(Photo.objects.get(user=self.user2).photo, temp_photo,
+                         "A failed update should not change the photo")
+
+        # this file isn't a photo
+        with open(TEST_PHOTO_DIR / 'not_a_photo.txt', 'rb') as f:
+            response = c.put('/v2/edit/',
+                             {'photo': f},
+                             HTTP_AUTHORIZATION=f'Token {self.token2}',
+                             format='multipart')
+            self.assertContains(response, '', status_code=400)
+        self.assertEqual(Photo.objects.filter(user=self.user2).count(), 1)
+        self.assertEqual(Photo.objects.get(user=self.user2).photo, temp_photo,
+                         "A failed update should not change the photo")
+
+        # this file isn't a photo
+        with open(TEST_PHOTO_DIR / 'not_a_photo.png', 'rb') as f:
+            response = c.put('/v2/edit/',
+                             {'photo': f},
+                             HTTP_AUTHORIZATION=f'Token {self.token2}',
+                             format='multipart')
             self.assertContains(response, '', status_code=400)
         self.assertEqual(Photo.objects.filter(user=self.user2).count(), 1)
         self.assertEqual(Photo.objects.get(user=self.user2).photo, temp_photo,
@@ -875,18 +903,19 @@ class APIV2TestSuite(TestCase):
         self.assertEqual(expected.deleted, actual.deleted)
 
     def verifyPhoto(self, user, token, photo):
-        c = Client()
-        response = c.put('/v2/edit/', {'photo': photo},
+        c = APIClient()
+
+        response = c.put('/v2/edit/', data={'photo': photo},
                          HTTP_AUTHORIZATION=f'Token {token}',
-                         content_type=get_content_type())
+                         format='multipart')
         print(response.data)
         self.assertContains(response, '', status_code=200)
         self.assertEqual(Photo.objects.filter(user=user).count(), 1)
         photo_data = Photo.objects.get(user=user).photo
         temp_photo: Image.Image = Image.open(io.BytesIO(base64.b64decode(photo_data)))
         self.assertEqual(temp_photo.size, (Photo.PHOTO_SIZE, Photo.PHOTO_SIZE))
-        temp_photo.show()
-        Image.open(io.BytesIO(base64.b64decode(photo))).show()
+        # temp_photo.show()
+        # Image.open(photo).show()
         response = c.get('/v2/get_info/', HTTP_AUTHORIZATION=f'Token {token}', content_type=get_content_type())
         self.assertEqual(response.data['data']['photo'], photo_data)
 
