@@ -484,7 +484,7 @@ class APIV2TestSuite(TestCase):
         self.assertEqual(Photo.objects.filter(user=self.user1).count(), 1)
         self.assertEqual(Photo.objects.get(user=self.user1).photo, temp_photo,
                          "Updating another user's photo should not impact existing photos")
-        with open(TEST_PHOTO_DIR / 'photo4.JPG', 'rb') as f:
+        with open(TEST_PHOTO_DIR / 'photo4.jpg', 'rb') as f:
             self.verifyPhoto(self.user2, self.token2, f)
         self.assertEqual(Photo.objects.filter(user=self.user1).count(), 1)
         self.assertEqual(Photo.objects.get(user=self.user1).photo, temp_photo,
