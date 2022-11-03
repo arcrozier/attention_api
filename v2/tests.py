@@ -914,8 +914,8 @@ class APIV2TestSuite(TestCase):
         photo_data = Photo.objects.get(user=user).photo
         temp_photo: Image.Image = Image.open(io.BytesIO(base64.b64decode(photo_data)))
         self.assertEqual(temp_photo.size, (Photo.PHOTO_SIZE, Photo.PHOTO_SIZE))
-        temp_photo.show()
-        Image.open(photo).show()
+        # temp_photo.show()
+        # Image.open(photo).show()
         response = c.get('/v2/get_info/', HTTP_AUTHORIZATION=f'Token {token}', content_type=get_content_type())
         self.assertEqual(response.data['data']['photo'], photo_data)
 
