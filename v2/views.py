@@ -6,6 +6,7 @@ import time
 from typing import Any, Tuple, Dict
 
 import firebase_admin
+from PIL import Image, ImageOps
 from PIL.Image import DecompressionBombError
 from django.conf import settings
 from django.contrib.auth import get_user_model, authenticate
@@ -24,7 +25,6 @@ from rest_framework.decorators import api_view, permission_classes, throttle_cla
 from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
-from PIL import Image, UnidentifiedImageError, ImageOps
 from rest_framework.throttling import UserRateThrottle
 
 from v2.models import FCMTokens, Friend, Photo
@@ -394,8 +394,8 @@ def edit_user(request: Request) -> Response:
             temp_image: Image.Image | None = Image.open(request.data['photo'])
         except DecompressionBombError:
             return Response(build_response('Profile picture was too large'), status=413)
-        except UnidentifiedImageError as e:
-            invalid_fields['photo'] = e.strerror
+        except Exception as e:
+            invalid_fields['photo'] = str(e)
 
     if len(invalid_fields) != 0:
         message = ', '.join([f'{x} ({invalid_fields[x]})' for x in invalid_fields])
@@ -450,8 +450,6 @@ def edit_user(request: Request) -> Response:
         return Response(build_response('Incorrect old password'), status=401)
     except IntegrityError:
         return Response(build_response(f'{invalid_field} in use'), status=400)
-    except DecompressionBombError:
-        return Response(build_response('Profile picture was too large'), status=413)
     return Response(build_response('User updated successfully'), status=200)
 
 
