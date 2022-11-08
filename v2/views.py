@@ -401,7 +401,7 @@ def edit_user(request: Request) -> Response:
         message = ', '.join([f'{x} ({invalid_fields[x]})' for x in invalid_fields])
         logger.info(message)
         return Response(build_response(
-            f'Could not update user: invalid value{"s" if len(invalid_fields) > 0 else ""} for {message}'), status=400)
+            f'Could not update user: invalid value{"s" if len(invalid_fields) != 1 else ""} for {message}'), status=400)
     try:
         with transaction.atomic():
             photo = None
