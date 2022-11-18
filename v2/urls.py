@@ -32,6 +32,7 @@ urlpatterns = [
     path('get_name/', views.get_friend_name),
     path('delete_friend/<str:username>/', views.delete_friend),
     path('edit/', views.edit_user),
+    path('photo/', views.edit_photo),
     path('get_info/', views.get_user_info),
     path('delete_user_data/', views.delete_user_data),
     path('alert_read/', views.alert_read),

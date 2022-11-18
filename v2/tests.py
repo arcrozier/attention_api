@@ -509,7 +509,7 @@ class APIV2TestSuite(TestCase):
         c = APIClient()  # this should return file too large (file exceeds ~200 megapixel limit without exceeding 20 MB
         # limit)
         with open(TEST_PHOTO_DIR / 'decompression_bomb.png', 'rb') as f:
-            response = c.put('/v2/edit/',
+            response = c.put('/v2/photo/',
                              {'photo': f},
                              HTTP_AUTHORIZATION=f'Token {self.token2}',
                              format='multipart')
@@ -521,7 +521,7 @@ class APIV2TestSuite(TestCase):
 
         # this file exceeds the 20 MB limit
         with open(TEST_PHOTO_DIR / 'too_large.png', 'rb') as f:
-            response = c.put('/v2/edit/',
+            response = c.put('/v2/photo/',
                              {'photo': f},
                              HTTP_AUTHORIZATION=f'Token {self.token2}',
                              format='multipart')
@@ -532,7 +532,7 @@ class APIV2TestSuite(TestCase):
 
         # this file isn't a photo
         with open(TEST_PHOTO_DIR / 'not_a_photo.txt', 'rb') as f:
-            response = c.put('/v2/edit/',
+            response = c.put('/v2/photo/',
                              {'photo': f},
                              HTTP_AUTHORIZATION=f'Token {self.token2}',
                              format='multipart')
@@ -543,7 +543,7 @@ class APIV2TestSuite(TestCase):
 
         # this file isn't a photo
         with open(TEST_PHOTO_DIR / 'not_a_photo.png', 'rb') as f:
-            response = c.put('/v2/edit/',
+            response = c.put('/v2/photo/',
                              {'photo': f},
                              HTTP_AUTHORIZATION=f'Token {self.token2}',
                              format='multipart')
@@ -905,7 +905,7 @@ class APIV2TestSuite(TestCase):
     def verifyPhoto(self, user, token, photo):
         c = APIClient()
 
-        response = c.put('/v2/edit/', data={'photo': photo},
+        response = c.put('/v2/photo/', data={'photo': photo},
                          HTTP_AUTHORIZATION=f'Token {token}',
                          format='multipart')
         print(response.data)
