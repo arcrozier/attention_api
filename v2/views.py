@@ -349,14 +349,12 @@ class EditUserThrottle(UserRateThrottle):
 
 @api_view(['PUT'])
 @throttle_classes([EditUserThrottle] if not settings.IS_TESTING else [])
-def edit_user(request: Request) -> Response:
+def edit_photo(request: Request) -> Response:
     """
     /v2/edit/
     PUT: Updates the corresponding fields for the authenticated user.
 
-    Has 5 optional parameters: `first_name`, `last_name`, `email`, `photo`, `password`, and `old_password`.
-    If `password` is provided, `old_password` must also be provided (returning status 400 if it is not), and it should
-    be the password the user currently has - otherwise, will return status 401.
+    Has 1 required parameter: `photo`.
 
     The photo should be uploaded in its binary format. EXIF rotation data is applied, but other metadata is stripped.
     If the image is too large (more than 178,956,970 pixels, to be precise), will return status 413.
@@ -369,6 +367,56 @@ def edit_user(request: Request) -> Response:
 
     Returns no data.
     """
+    good, response = check_params(['photo'], request.data)
+    if not good:
+        return response
+
+    try:
+        temp_image: Image.Image | None = Image.open(request.data['photo'])
+
+        if temp_image.width > temp_image.height:
+            # image is wider than it is tall - size should be (128 * aspect ratio, 128)
+            size = ((Photo.PHOTO_SIZE * temp_image.width) // temp_image.height, Photo.PHOTO_SIZE)
+        else:
+            # image is taller than it is wide - size should be (128, 128 * aspect ratio)
+            size = (Photo.PHOTO_SIZE, (Photo.PHOTO_SIZE * temp_image.height) // temp_image.width)
+        temp_image = temp_image.resize(size=size, resample=Image.Resampling.LANCZOS) \
+            .crop(box=((size[0] - Photo.PHOTO_SIZE) // 2,  # we get the 128 x 128 square in the middle
+                       (size[1] - Photo.PHOTO_SIZE) // 2,
+                       (size[0] + Photo.PHOTO_SIZE) // 2,
+                       (size[1] + Photo.PHOTO_SIZE) // 2))
+        temp_image = ImageOps.exif_transpose(temp_image)
+        buffered = io.BytesIO()
+        temp_image.save(buffered, format='PNG', exif=temp_image.getexif())
+        photo, _ = Photo.objects.update_or_create(user=request.user, defaults={
+            'photo': base64.b64encode(buffered.getvalue()).decode()})
+
+        return Response(build_response('Profile photo updated'), status=200)
+
+    except DecompressionBombError:
+        return Response(build_response('Profile picture was too large'), status=413)
+    except Exception as e:
+        return Response(build_response(f'Invalid photo: {e}'), status=400)
+
+
+@api_view(['PUT'])
+def edit_user(request: Request) -> Response:
+    """
+    /v2/edit/
+    PUT: Updates the corresponding fields for the authenticated user.
+
+    Has 5 optional parameters: `first_name`, `last_name`, `email`, `password`, and `old_password`.
+    If `password` is provided, `old_password` must also be provided (returning status 400 if it is not), and it should
+    be the password the user currently has - otherwise, will return status 401.
+
+    Requires authentication.
+
+    Returns no data.
+    """
+
+    if settings.DEBUG:
+        logger.debug(f'Request: {request.body}')
+
     invalid_fields = {}
     if 'username' in request.data:
         try:
@@ -376,26 +424,18 @@ def edit_user(request: Request) -> Response:
         except ValidationError as e:
             invalid_fields['username'] = e.message
 
-    if 'email' in request.data:
+    if 'email' in request.data and request.data['email'].strip():
         try:
             validate_email(request.data['email'])
         except ValidationError as e:
             invalid_fields['email'] = e.message
+            logger.debug(f'Email: {request.data["email"]}')
 
     if 'password' in request.data:
         if 'old_password' not in request.data:
             invalid_fields['old_password'] = 'to update password, `old_password` must be provided'
         elif len(request.data['password']) < 8:
             invalid_fields['password'] = 'password must be at least 8 characters'
-
-    temp_image = None
-    if 'photo' in request.data:
-        try:
-            temp_image: Image.Image | None = Image.open(request.data['photo'])
-        except DecompressionBombError:
-            return Response(build_response('Profile picture was too large'), status=413)
-        except Exception as e:
-            invalid_fields['photo'] = str(e)
 
     if len(invalid_fields) != 0:
         message = ', '.join([f'{x} ({invalid_fields[x]})' for x in invalid_fields])
@@ -404,7 +444,6 @@ def edit_user(request: Request) -> Response:
             f'Could not update user: invalid value{"s" if len(invalid_fields) != 1 else ""} for {message}'), status=400)
     try:
         with transaction.atomic():
-            photo = None
             user = get_user_model().objects.select_for_update().get(username=request.user.username)
             if 'username' in request.data:
                 invalid_field = 'username'
@@ -416,23 +455,6 @@ def edit_user(request: Request) -> Response:
             if 'email' in request.data:
                 invalid_field = 'email'
                 user.email = request.data['email']
-            if temp_image is not None:
-                if temp_image.width > temp_image.height:
-                    # image is wider than it is tall - size should be (128 * aspect ratio, 128)
-                    size = ((Photo.PHOTO_SIZE * temp_image.width) // temp_image.height, Photo.PHOTO_SIZE)
-                else:
-                    # image is taller than it is wide - size should be (128, 128 * aspect ratio)
-                    size = (Photo.PHOTO_SIZE, (Photo.PHOTO_SIZE * temp_image.height) // temp_image.width)
-                temp_image = temp_image.resize(size=size, resample=Image.Resampling.LANCZOS) \
-                    .crop(box=((size[0] - Photo.PHOTO_SIZE) // 2,  # we get the 128 x 128 square in the middle
-                               (size[1] - Photo.PHOTO_SIZE) // 2,
-                               (size[0] + Photo.PHOTO_SIZE) // 2,
-                               (size[1] + Photo.PHOTO_SIZE) // 2))
-                temp_image = ImageOps.exif_transpose(temp_image)
-                buffered = io.BytesIO()
-                temp_image.save(buffered, format='PNG', exif=temp_image.getexif())
-                photo, _ = Photo.objects.update_or_create(user=user, defaults={
-                    'photo': base64.b64encode(buffered.getvalue()).decode()})
             if 'password' in request.data:
                 assert(len(request.data['password']) >= 8)
                 assert('old_password' in request.data)
@@ -444,8 +466,6 @@ def edit_user(request: Request) -> Response:
                 else:
                     raise PermissionDenied('Invalid password')
             user.save()
-            if photo is not None:
-                photo.save()
     except PermissionDenied:
         return Response(build_response('Incorrect old password'), status=401)
     except IntegrityError:
