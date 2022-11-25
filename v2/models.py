@@ -12,7 +12,7 @@ class User(AbstractUser):
     google_id = models.CharField(max_length=100, unique=True, blank=True, null=True)
 
     def save(self, *args, **kwargs):
-        if self.email.strip() == "":
+        if self.email is not None and self.email.strip() == "":
             self.email = None
         if self.google_id == "":
             self.google_id = None
