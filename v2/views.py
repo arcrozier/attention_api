@@ -424,7 +424,7 @@ def edit_user(request: Request) -> Response:
         except ValidationError as e:
             invalid_fields['username'] = e.message
 
-    if 'email' in request.data:
+    if 'email' in request.data and request.data['email'].strip():
         try:
             validate_email(request.data['email'])
         except ValidationError as e:
@@ -444,7 +444,6 @@ def edit_user(request: Request) -> Response:
             f'Could not update user: invalid value{"s" if len(invalid_fields) != 1 else ""} for {message}'), status=400)
     try:
         with transaction.atomic():
-            photo = None
             user = get_user_model().objects.select_for_update().get(username=request.user.username)
             if 'username' in request.data:
                 invalid_field = 'username'
@@ -467,8 +466,6 @@ def edit_user(request: Request) -> Response:
                 else:
                     raise PermissionDenied('Invalid password')
             user.save()
-            if photo is not None:
-                photo.save()
     except PermissionDenied:
         return Response(build_response('Incorrect old password'), status=401)
     except IntegrityError:
