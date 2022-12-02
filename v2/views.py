@@ -456,8 +456,8 @@ def edit_user(request: Request) -> Response:
                 invalid_field = 'email'
                 user.email = request.data['email']
             if 'password' in request.data:
-                assert(len(request.data['password']) >= 8)
-                assert('old_password' in request.data)
+                assert (len(request.data['password']) >= 8)
+                assert ('old_password' in request.data)
                 check_pass = authenticate(username=request.user.username, password=request.data['old_password'])
                 if check_pass is not None:
                     user.set_password(request.data['password'])
@@ -550,9 +550,8 @@ def get_user_info(request: Request) -> Response:
     }
     """
     user = request.user
-    friends = [flatten_friend(x) for x in Friend.objects
-        .select_related('friend__photo')
-        .filter(owner=user, deleted=False)]
+    friends = [flatten_friend(x) for x in Friend.objects.select_related('friend__photo')
+                                                        .filter(owner=user, deleted=False)]
     data = {
         'username': user.username,
         'first_name': user.first_name,
