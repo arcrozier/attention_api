@@ -26,12 +26,18 @@ from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
+from django.contrib.auth import update_session_auth_hash
 
 from v2.models import FCMTokens, Friend, Photo
 
 logger = logging.getLogger(__name__)
 
 CLIENT_ID = '357995852275-tcfjuvtbrk3c57t5gsuc9a9jdfdn137s.apps.googleusercontent.com'
+
+"""
+For endpoints that require authentication, the required format is "Authorization: Token <token>" (that is, 
+the Authorization header should be set to "Token <token>")
+"""
 
 
 @api_view(['POST'])
@@ -466,6 +472,7 @@ def edit_user(request: Request) -> Response:
                 else:
                     raise PermissionDenied('Invalid password')
             user.save()
+            update_session_auth_hash(request, user)
     except PermissionDenied:
         return Response(build_response('Incorrect old password'), status=401)
     except IntegrityError:
