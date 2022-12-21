@@ -38,4 +38,6 @@ urlpatterns = [
     path('alert_read/', views.alert_read),
     path('edit_friend_name/', views.edit_friend_name),
     path('alert_delivered/', views.alert_delivered),
+    path('set-csrf/', views.set_csrf_token, name='Set-CSRF'),
+    path('login/', views.login_view, name='Login'),
 ]
