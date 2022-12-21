@@ -9,12 +9,15 @@ import firebase_admin
 from PIL import Image, ImageOps
 from PIL.Image import DecompressionBombError
 from django.conf import settings
-from django.contrib.auth import get_user_model, authenticate
+from django.contrib.auth import get_user_model, authenticate, login
 from django.contrib.auth.validators import ASCIIUsernameValidator
 from django.core.exceptions import ValidationError, PermissionDenied
 from django.core.validators import validate_email
 from django.db import transaction, IntegrityError
 from django.db.models import QuerySet
+from django.http import JsonResponse
+from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.http import require_POST
 from firebase_admin import messaging
 from firebase_admin.exceptions import InvalidArgumentError
 from firebase_admin.messaging import UnregisteredError
@@ -789,6 +792,39 @@ def alert_read(request: Request) -> Response:
     if not at_least_one_success:
         return Response(build_response(f"Unable to send read status"), status=400)
     return Response(build_response("Successfully sent read status"), status=200)
+
+
+@api_view(['POST'])
+@ensure_csrf_cookie
+def set_csrf_token(request):
+    """
+    This will be `/api/set-csrf-cookie/` on `urls.py`
+    """
+    return JsonResponse({"details": "CSRF cookie set"})
+
+
+@api_view(['POST'])
+def login_view(request):
+    """
+    This will be `/api/login/` on `urls.py`
+    """
+    data = json.loads(request.body)
+    username = data.get('username')
+    password = data.get('password')
+    if username is None or password is None:
+        return JsonResponse({
+            "errors": {
+                "__all__": "Please enter both username and password"
+            }
+        }, status=400)
+    user = authenticate(username=username, password=password)
+    if user is not None:
+        login(request, user)
+        return Response(build_response("success"), status=200)
+    return JsonResponse(
+        {"detail": "Invalid credentials"},
+        status=403,
+    )
 
 
 def check_params(expected: list, holder: Dict) -> Tuple[bool, Response]:
