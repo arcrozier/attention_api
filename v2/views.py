@@ -1,20 +1,20 @@
 import base64
 import io
-import json
 import logging
 import time
-from typing import Any, Tuple, Dict
 
 import firebase_admin
 from PIL import Image, ImageOps
 from PIL.Image import DecompressionBombError
 from django.conf import settings
-from django.contrib.auth import get_user_model, authenticate
+from django.contrib.auth import get_user_model, authenticate, login
+from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.validators import ASCIIUsernameValidator
 from django.core.exceptions import ValidationError, PermissionDenied
 from django.core.validators import validate_email
 from django.db import transaction, IntegrityError
 from django.db.models import QuerySet
+from django.views.decorators.csrf import ensure_csrf_cookie
 from firebase_admin import messaging
 from firebase_admin.exceptions import InvalidArgumentError
 from firebase_admin.messaging import UnregisteredError
@@ -27,14 +27,22 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
 
+from v2.decorators import require_params, require_query_params
 from v2.models import FCMTokens, Friend, Photo
+from v2.utils import build_response, flatten_friend
 
 logger = logging.getLogger(__name__)
 
 CLIENT_ID = '357995852275-tcfjuvtbrk3c57t5gsuc9a9jdfdn137s.apps.googleusercontent.com'
 
+"""
+For endpoints that require authentication, the required format is "Authorization: Token <token>" (that is, 
+the Authorization header should be set to "Token <token>")
+"""
+
 
 @api_view(['POST'])
+@require_params('fcm_token')
 def register_device(request: Request) -> Response:
     """
     /v2/register_device/
@@ -48,9 +56,6 @@ def register_device(request: Request) -> Response:
     Returns status 200 otherwise
     No data is returned.
     """
-    good, response = check_params(['fcm_token'], request.data)
-    if not good:
-        return response
 
     try:
         with transaction.atomic():
@@ -61,6 +66,7 @@ def register_device(request: Request) -> Response:
 
 
 @api_view(['POST'])
+@require_params('fcm_token')
 def unregister_device(request: Request) -> Response:
     """
     POST: Registers a device for receiving alerts for an account.
@@ -73,9 +79,6 @@ def unregister_device(request: Request) -> Response:
     Returns status 200 otherwise
     No data is returned.
     """
-    good, response = check_params(['fcm_token'], request.data)
-    if not good:
-        return response
 
     try:
         with transaction.atomic():
@@ -87,6 +90,7 @@ def unregister_device(request: Request) -> Response:
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@require_params('first_name', 'last_name', 'username', 'password', 'tos_agree')
 def register_user(request: Request) -> Response:
     """
     /v2/register_user/
@@ -105,9 +109,6 @@ def register_user(request: Request) -> Response:
     Otherwise: status 200
     Returns no data.
     """
-    good, response = check_params(['first_name', 'last_name', 'username', 'password', 'tos_agree'], request.data)
-    if not good:
-        return response
     if request.data['tos_agree'] != 'yes':
         return Response(build_response('You must agree to the terms of service to register an account'),
                         status=400)
@@ -132,6 +133,7 @@ def register_user(request: Request) -> Response:
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@require_params('id_token')
 def google_oauth(request: Request) -> Response:
     """
     /v2/google_auth/
@@ -148,9 +150,6 @@ def google_oauth(request: Request) -> Response:
     If the user wants to create an account, returns status 401 - should try again with the username parameter set
     If the Google account token is invalid, returns status 403
     """
-    good, response = check_params(['id_token'], request.data)
-    if not good:
-        return response
 
     token = request.data['id_token']
     try:
@@ -194,6 +193,7 @@ def google_oauth(request: Request) -> Response:
 
 
 @api_view(['POST'])
+@require_params('username')
 def add_friend(request: Request) -> Response:
     """
     /v2/add_friend/
@@ -206,9 +206,6 @@ def add_friend(request: Request) -> Response:
 
     Returns no data.
     """
-    good, response = check_params(['username'], request.data)
-    if not good:
-        return response
 
     try:
         friend = get_user_model().objects.get(username=request.data['username'])
@@ -222,6 +219,7 @@ def add_friend(request: Request) -> Response:
 
 
 @api_view(['PUT'])
+@require_params('username', 'new_name')
 def edit_friend_name(request: Request) -> Response:
     """
     /v2/edit_friend_name/
@@ -246,9 +244,6 @@ def edit_friend_name(request: Request) -> Response:
 
     Returns no data
     """
-    good, response = check_params(['username', 'new_name'], request.data)
-    if not good:
-        return response
 
     try:
         friend = get_user_model().objects.get(username=request.data['username'])
@@ -265,6 +260,7 @@ def edit_friend_name(request: Request) -> Response:
 
 
 @api_view(['GET', 'HEAD'])
+@require_query_params('username')
 def get_friend_name(request: Request) -> Response:
     """
     /v2/get_name/
@@ -279,9 +275,6 @@ def get_friend_name(request: Request) -> Response:
         name: <user's name>
     }
     """
-    good, response = check_params(['username'], request.query_params)
-    if not good:
-        return response
 
     try:
         friend = get_user_model().objects.get(username=request.query_params['username'])
@@ -319,6 +312,7 @@ def delete_friend(request: Request, username) -> Response:
 
 
 @api_view(['DELETE'])
+@require_params('username', 'password')
 def delete_user_data(request: Request) -> Response:
     """
     /v2/delete_user/data/
@@ -331,9 +325,6 @@ def delete_user_data(request: Request) -> Response:
 
     Returns no data.
     """
-    good, response = check_params(['username', 'password'], request.data)
-    if not good:
-        return response
 
     user = authenticate(username=request.data['username'], password=request.data['password'])
     if request.user.username != request.data['username'] or user is None:
@@ -349,6 +340,7 @@ class EditUserThrottle(UserRateThrottle):
 
 @api_view(['PUT'])
 @throttle_classes([EditUserThrottle] if not settings.IS_TESTING else [])
+@require_params('photo')
 def edit_photo(request: Request) -> Response:
     """
     /v2/edit/
@@ -367,9 +359,6 @@ def edit_photo(request: Request) -> Response:
 
     Returns no data.
     """
-    good, response = check_params(['photo'], request.data)
-    if not good:
-        return response
 
     try:
         temp_image: Image.Image | None = Image.open(request.data['photo'])
@@ -466,6 +455,7 @@ def edit_user(request: Request) -> Response:
                 else:
                     raise PermissionDenied('Invalid password')
             user.save()
+            update_session_auth_hash(request, user)
     except PermissionDenied:
         return Response(build_response('Incorrect old password'), status=401)
     except IntegrityError:
@@ -474,6 +464,7 @@ def edit_user(request: Request) -> Response:
 
 
 @api_view(['POST'])
+@require_params('password', 'id_token')
 def link_google_account(request: Request) -> Response:
     """
     /v2/link_google_account/
@@ -487,9 +478,6 @@ def link_google_account(request: Request) -> Response:
     Returns 400 if the Google account is already linked to another account
     No data
     """
-    good, response = check_params(['password', 'id_token'], request.data)
-    if not good:
-        return response
 
     user = request.user
     token = request.data['id_token']
@@ -570,6 +558,7 @@ class AlertThrottle(UserRateThrottle):
 
 @api_view(['POST'])
 @throttle_classes([AlertThrottle] if not settings.IS_TESTING else [])
+@require_params('to')
 def send_alert(request: Request) -> Response:
     """
     /v2/send_alert/
@@ -591,9 +580,6 @@ def send_alert(request: Request) -> Response:
     }
     """
     # unauthenticated requests should be denied automatically - test this
-    good, response = check_params(['to'], request.data)
-    if not good:
-        return response
 
     to: str = request.data['to']
 
@@ -652,6 +638,7 @@ def send_alert(request: Request) -> Response:
 
 
 @api_view(['POST'])
+@require_params('alert_id', 'from')
 def alert_delivered(request: Request) -> Response:
     """
     /v2/alert_delivered/
@@ -663,9 +650,6 @@ def alert_delivered(request: Request) -> Response:
 
     Returns no data.
     """
-    good, response = check_params(['alert_id', 'from'], request.data)
-    if not good:
-        return response
 
     try:
         with transaction.atomic():
@@ -718,6 +702,7 @@ def alert_delivered(request: Request) -> Response:
 
 
 @api_view(['POST'])
+@require_params('alert_id', 'from', 'fcm_token')
 def alert_read(request: Request) -> Response:
     """
     /v2/alert_read/
@@ -729,9 +714,6 @@ def alert_read(request: Request) -> Response:
 
     Returns no data.
     """
-    good, response = check_params(['alert_id', 'from', 'fcm_token'], request.data)
-    if not good:
-        return response
 
     try:
         with transaction.atomic():
@@ -784,37 +766,26 @@ def alert_read(request: Request) -> Response:
     return Response(build_response("Successfully sent read status"), status=200)
 
 
-def check_params(expected: list, holder: Dict) -> Tuple[bool, Response]:
-    missing: list = []
-    for expect in expected:
-        if expect not in holder:
-            missing.append(expect)
-    response = Response(build_response(f"Missing required parameter(s): {', '.join(missing)}"),
-                        status=400) if len(missing) != 0 else Response()
-    return len(missing) == 0, response
+@api_view(['GET'])
+@ensure_csrf_cookie
+def set_csrf_token(request):
+    """
+    This will be `/api/set-csrf-cookie/` on `urls.py`
+    """
+    return Response(build_response("Set token"), status=200)
 
 
-def build_response(message: str, data: Any = None, string: bool = False) -> dict:
-    response = {
-        "message": message,
-        "data": data
-    }
-    if string:
-        response = string_response(response)
-    return response
-
-
-def string_response(args: dict):
-    return json.dumps(args)
-
-
-def flatten_friend(friend: Friend):
-    return {
-        'friend': friend.friend.username,
-        'name': friend.name or f'{friend.friend.first_name} {friend.friend.last_name}',
-        'photo': friend.friend.photo.photo if hasattr(friend.friend, 'photo') else None,
-        'sent': friend.sent,
-        'received': friend.received,
-        'last_message_id_sent': friend.last_sent_alert_id,
-        'last_message_status': friend.get_last_sent_message_status_display(),
-    }
+@api_view(['POST'])
+@require_params('username', 'password')
+def login_session(request):
+    """
+    This will be `/api/login/` on `urls.py`
+    """
+    data = request.data
+    username = data['username']
+    password = data['password']
+    user = authenticate(username=username, password=password)
+    if user is not None:
+        login(request, user)
+        return Response(build_response("success"), status=200)
+    return Response(build_response("Invalid credentials"), status=403)

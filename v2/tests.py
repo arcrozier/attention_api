@@ -12,7 +12,7 @@ from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
 from v2.models import FCMTokens, Friend, Photo
-from v2.views import check_params
+from v2.utils import check_params
 
 # Create your tests here.
 
