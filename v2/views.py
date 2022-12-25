@@ -767,6 +767,7 @@ def alert_read(request: Request) -> Response:
 
 
 @api_view(['GET'])
+@permission_classes([AllowAny])
 @ensure_csrf_cookie
 def set_csrf_token(request):
     """
@@ -776,6 +777,7 @@ def set_csrf_token(request):
 
 
 @api_view(['POST'])
+@permission_classes([AllowAny])
 @require_params('username', 'password')
 def login_session(request):
     """
