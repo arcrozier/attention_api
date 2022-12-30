@@ -3,7 +3,6 @@ import io
 import logging
 import time
 
-import firebase_admin
 from PIL import Image, ImageOps
 from PIL.Image import DecompressionBombError
 from django.conf import settings
