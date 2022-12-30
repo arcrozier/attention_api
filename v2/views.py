@@ -124,7 +124,8 @@ def register_user(request: Request) -> Response:
                                                  username=request.data['username'],
                                                  password=request.data['password'],
                                                  email=request.data.get('email'))
-    except IntegrityError:
+    except IntegrityError as e:
+        logger.warning(str(e))
         return Response(build_response('Username taken'), status=400)
     except ValidationError as e:
         return Response(build_response(e.message), status=400)
@@ -601,11 +602,7 @@ def send_alert(request: Request) -> Response:
 
     tokens: QuerySet = FCMTokens.objects.filter(user__username=to)
     if not bool(tokens):
-        return Response(build_response(f'Could not find devices belong to user {to}'), status=400)
-    try:
-        firebase_admin.initialize_app()
-    except ValueError:
-        logger.info('Firebase Admin app already initialized')
+        return Response(build_response(f'Could not find devices belonging to user {to}'), status=400)
 
     at_least_one_success: bool = False
     for token in tokens:
@@ -669,10 +666,6 @@ def alert_delivered(request: Request) -> Response:
     if not bool(tokens):
         logger.warning("Could not find tokens for recipient")
         return Response(build_response(f'An error occurred'), status=500)
-    try:
-        firebase_admin.initialize_app()
-    except ValueError:
-        logger.info('Firebase Admin app already initialized')
 
     at_least_one_success: bool = False
     for token in tokens:
@@ -734,10 +727,6 @@ def alert_read(request: Request) -> Response:
     if not bool(tokens):
         logger.warning("Could not find tokens for recipient or the users' other devices")
         return Response(build_response(f'An error occurred'), status=500)
-    try:
-        firebase_admin.initialize_app()
-    except ValueError:
-        logger.info('Firebase Admin app already initialized')
 
     at_least_one_success: bool = False
     for token in tokens:
