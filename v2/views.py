@@ -124,8 +124,17 @@ def register_user(request: Request) -> Response:
                                                  password=request.data['password'],
                                                  email=request.data.get('email'))
     except IntegrityError as e:
-        logger.warning(str(e))
-        return Response(build_response('Username taken'), status=400)
+        fields = []
+        unique_fields = ['username', 'email']
+        for arg in e.args:
+            for field in unique_fields:
+                if f'v2_user.{field}' in arg:
+                    fields.append(field)
+        if len(fields) > 0:
+            return Response(build_response(f'{", ".join(fields)} taken'), status=400)
+        else:
+            logger.warning(e.args)
+            return Response(build_response('Invalid input'), status=400)
     except ValidationError as e:
         return Response(build_response(e.message), status=400)
     return Response(build_response('User created'), status=200)
