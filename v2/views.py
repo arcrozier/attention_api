@@ -171,12 +171,19 @@ def google_oauth(request: Request) -> Response:
         first_name = idinfo['given_name']
         last_name = idinfo['family_name']
         user_set = get_user_model().objects.select_for_update().filter(google_id=userid)
+        bumped_user_set = get_user_model().objects.select_for_update().filter(email=email)
         try:
             with transaction.atomic():
                 if 'username' in request.data:
                     if 'tos_agree' not in request.data or request.data['tos_agree'] != 'yes':
                         raise ValidationError('you must agree to terms of service')
                     ASCIIUsernameValidator()(request.data['username'])
+
+                    if len(bumped_user_set) != 0:
+                        assert(len(bumped_user_set) == 1)
+                        bumped_user_set[0].email = None
+                        bumped_user_set[0].save()
+
                     user = get_user_model().objects.create_user(first_name=first_name,
                                                                 last_name=last_name,
                                                                 username=request.data['username'],
