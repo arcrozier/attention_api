@@ -37,9 +37,24 @@ ALLOWED_HOSTS = ['*']
 
 INSTALLED_APPS = production.INSTALLED_APPS
 
+i = INSTALLED_APPS.index('rest_framework')
+INSTALLED_APPS.insert(i, 'corsheaders')
+
 AUTH_USER_MODEL = production.AUTH_USER_MODEL
 
 MIDDLEWARE = production.MIDDLEWARE
+
+i = MIDDLEWARE.index('django.middleware.common.CommonMiddleware')
+MIDDLEWARE.insert(i, 'corsheaders.middleware.CorsMiddleware')
+
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000'
+]
+
+CORS_ALLOW_CREDENTIALS = True
+
+SESSION_COOKIE_SAMESITE = None
 
 ROOT_URLCONF = production.ROOT_URLCONF
 

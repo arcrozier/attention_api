@@ -3,7 +3,6 @@ import io
 import logging
 import time
 
-import firebase_admin
 from PIL import Image, ImageOps
 from PIL.Image import DecompressionBombError
 from django.conf import settings
@@ -124,8 +123,18 @@ def register_user(request: Request) -> Response:
                                                  username=request.data['username'],
                                                  password=request.data['password'],
                                                  email=request.data.get('email'))
-    except IntegrityError:
-        return Response(build_response('Username taken'), status=400)
+    except IntegrityError as e:
+        fields = []
+        unique_fields = ['username', 'email']
+        for arg in e.args:
+            for field in unique_fields:
+                if f'v2_user.{field}' in arg:
+                    fields.append(field)
+        if len(fields) > 0:
+            return Response(build_response(f'{", ".join(fields)} taken'), status=400)
+        else:
+            logger.warning(e.args)
+            return Response(build_response('Invalid input'), status=400)
     except ValidationError as e:
         return Response(build_response(e.message), status=400)
     return Response(build_response('User created'), status=200)
@@ -162,12 +171,19 @@ def google_oauth(request: Request) -> Response:
         first_name = idinfo['given_name']
         last_name = idinfo['family_name']
         user_set = get_user_model().objects.select_for_update().filter(google_id=userid)
+        bumped_user_set = get_user_model().objects.select_for_update().filter(email=email)
         try:
             with transaction.atomic():
                 if 'username' in request.data:
                     if 'tos_agree' not in request.data or request.data['tos_agree'] != 'yes':
                         raise ValidationError('you must agree to terms of service')
                     ASCIIUsernameValidator()(request.data['username'])
+
+                    if len(bumped_user_set) != 0:
+                        assert(len(bumped_user_set) == 1)
+                        bumped_user_set[0].email = None
+                        bumped_user_set[0].save()
+
                     user = get_user_model().objects.create_user(first_name=first_name,
                                                                 last_name=last_name,
                                                                 username=request.data['username'],
@@ -601,11 +617,7 @@ def send_alert(request: Request) -> Response:
 
     tokens: QuerySet = FCMTokens.objects.filter(user__username=to)
     if not bool(tokens):
-        return Response(build_response(f'Could not find devices belong to user {to}'), status=400)
-    try:
-        firebase_admin.initialize_app()
-    except ValueError:
-        logger.info('Firebase Admin app already initialized')
+        return Response(build_response(f'Could not find devices belonging to user {to}'), status=400)
 
     at_least_one_success: bool = False
     for token in tokens:
@@ -669,10 +681,6 @@ def alert_delivered(request: Request) -> Response:
     if not bool(tokens):
         logger.warning("Could not find tokens for recipient")
         return Response(build_response(f'An error occurred'), status=500)
-    try:
-        firebase_admin.initialize_app()
-    except ValueError:
-        logger.info('Firebase Admin app already initialized')
 
     at_least_one_success: bool = False
     for token in tokens:
@@ -734,10 +742,6 @@ def alert_read(request: Request) -> Response:
     if not bool(tokens):
         logger.warning("Could not find tokens for recipient or the users' other devices")
         return Response(build_response(f'An error occurred'), status=500)
-    try:
-        firebase_admin.initialize_app()
-    except ValueError:
-        logger.info('Firebase Admin app already initialized')
 
     at_least_one_success: bool = False
     for token in tokens:
@@ -767,6 +771,7 @@ def alert_read(request: Request) -> Response:
 
 
 @api_view(['GET'])
+@permission_classes([AllowAny])
 @ensure_csrf_cookie
 def set_csrf_token(request):
     """
@@ -776,6 +781,7 @@ def set_csrf_token(request):
 
 
 @api_view(['POST'])
+@permission_classes([AllowAny])
 @require_params('username', 'password')
 def login_session(request):
     """
