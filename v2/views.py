@@ -545,10 +545,12 @@ def get_user_info(request: Request) -> Response:
             ...
         ]
     }
+
+    friends field is sorted by sent in descending order
     """
     user = request.user
     friends = [flatten_friend(x) for x in Friend.objects.select_related('friend__photo')
-                                                        .filter(owner=user, deleted=False)]
+                                                        .filter(owner=user, deleted=False).order_by('-sent')]
     data = {
         'username': user.username,
         'first_name': user.first_name,
