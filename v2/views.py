@@ -522,6 +522,11 @@ def link_google_account(request: Request) -> Response:
 
 
 @api_view(['GET', 'HEAD'])
+def test_auth(request: Request) -> Response:
+    return Response(data="Success", status=200)
+
+
+@api_view(['GET', 'HEAD'])
 def get_user_info(request: Request) -> Response:
     """
     /v2/get_info/
