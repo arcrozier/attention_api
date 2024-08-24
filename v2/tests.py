@@ -380,7 +380,7 @@ class APIV2TestSuite(TestCase):
         self.assertEqual(get_user_model().objects.get(username='user1').last_name, 'adams')
         self.assertNotEqual(get_user_model().objects.get(username='user1').password, password)
         self.assertNotEqual(get_user_model().objects.get(username='user1').password, 'password')
-        self.token1 = Token.objects.create(user=self.user1)
+        self.token1 = Token.objects.get(user=self.user1)
 
         response = c.put('/v2/edit/', {'email': 'valid@example.com'}, HTTP_AUTHORIZATION=f'Token {self.token1}',
                          content_type='application/json')
@@ -421,7 +421,7 @@ class APIV2TestSuite(TestCase):
         self.assertEqual(get_user_model().objects.get(username='user1').last_name, 'last')
         self.assertNotEqual(get_user_model().objects.get(username='user1').password, password)
         self.assertNotEqual(get_user_model().objects.get(username='user1').password, 'new_pass')
-        self.token1 = Token.objects.create(user=self.user1)
+        self.token1 = Token.objects.get(user=self.user1)
 
         response = c.put('/v2/edit/',
                          HTTP_AUTHORIZATION=f'Token {self.token1}',
