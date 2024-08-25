@@ -447,11 +447,10 @@ def edit_user(request: Request) -> Response:
         logger.info(message)
         return Response(build_response(
             f'Could not update user: invalid value{"s" if len(invalid_fields) != 1 else ""} for {message}'), status=400)
-    data = None
+    invalid_field = None
     try:
         with transaction.atomic():
             user = get_user_model().objects.select_for_update().get(username=request.user.username)
-            data = {"token": Token.objects.get(user=user).key}
             if 'username' in request.data:
                 invalid_field = 'username'
                 user.username = request.data['username']
@@ -470,12 +469,12 @@ def edit_user(request: Request) -> Response:
                     user.set_password(request.data['password'])
                     Token.objects.get(user=user).delete()
                     FCMTokens.objects.filter(user=user).delete()
-                    data = {"token": Token.objects.create(user=user).key}
+                    Token.objects.create(user=user)
                 else:
                     raise PermissionDenied('Invalid password')
             user.save()
             update_session_auth_hash(request, user)
-            return Response(build_response('User updated successfully', data=data), status=200)
+            return Response(build_response('User updated successfully', data={"token": Token.objects.get(user=user).key}), status=200)
     except PermissionDenied:
         return Response(build_response('Incorrect old password'), status=401)
     except IntegrityError:
