@@ -3,7 +3,7 @@ from typing import Any, Iterable
 
 from rest_framework.response import Response
 
-from v2.models import Friend
+from v2.models import User
 
 
 def check_params(expected: Iterable, holder: dict) -> tuple[bool, Response]:
@@ -31,7 +31,7 @@ def string_response(args: dict):
     return json.dumps(args)
 
 
-def flatten_friend(friend: Friend):
+def flatten_friend(friend: User):
     return {
         'friend': friend.friend.username,
         'name': friend.name or f'{friend.friend.first_name} {friend.friend.last_name}',

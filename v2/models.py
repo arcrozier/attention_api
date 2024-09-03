@@ -41,6 +41,7 @@ class Friend(models.Model):
     sent = models.IntegerField(default=0)
     received = models.IntegerField(default=0)
     deleted = models.BooleanField(default=False)
+    blocked = models.BooleanField(default=False)
     last_sent_message_status = models.CharField(max_length=1, choices=DELIVERY_CHOICES, null=True, default=None)
     last_sent_alert_id = models.CharField(max_length=100, null=True)
 
@@ -48,6 +49,9 @@ class Friend(models.Model):
         constraints = [
             models.UniqueConstraint(fields=['owner', 'friend'], name='unique_relationships')
         ]
+
+    def __str__(self):
+        return f"{self.owner} -> {self.friend}"
 
 
 class FCMTokens(models.Model):

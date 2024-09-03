@@ -554,6 +554,7 @@ class APIV2TestSuite(TestCase):
 
     def test_get_user_info(self):
         # dump the user info, check it all matches
+        self.maxDiff = None
         c = Client()
 
         user4 = get_user_model().objects.create_user(username='user4',
@@ -561,6 +562,7 @@ class APIV2TestSuite(TestCase):
                                                      first_name='will',
                                                      last_name='smith')
         f_user4 = Friend.objects.create(owner=self.user2, friend=user4, deleted=True)
+        Friend.objects.create(owner=self.user1, friend=self.user2)
 
         response = c.get('/v2/get_info/', HTTP_AUTHORIZATION=f'Token {self.token2}')
         self.assertContains(response, '', status_code=200)
@@ -584,17 +586,80 @@ class APIV2TestSuite(TestCase):
             ]
         }, response.data['data'])
 
+        Friend.objects.create(owner=user4, friend=self.user2)
+        f_user4.deleted = False
+        f_user4.save()
+
+        response = c.get('/v2/get_info/', HTTP_AUTHORIZATION=f'Token {self.token2}')
+        self.assertContains(response, '', status_code=200)
+        self.assertEqual({
+            'username': 'user2',
+            'first_name': 'will',
+            'last_name': 'smith',
+            'email': 'test@sample.verify',
+            'password_login': True,
+            'photo': None,
+            'friends': [
+                {
+                    'friend': 'user1',
+                    'name': 'poppin pippin',
+                    'sent': 3,
+                    'received': 0,
+                    'last_message_id_sent': None,
+                    'last_message_status': None,
+                    'photo': None
+                },
+                {
+                    'friend': 'user4',
+                    'name': 'will smith',
+                    'sent': 0,
+                    'received': 0,
+                    'last_message_id_sent': None,
+                    'last_message_status': None,
+                    'photo': None
+                }
+            ]
+        }, response.data['data'])
+
+        f_user4.blocked = True
+        f_user4.save()
+
+        response = c.get('/v2/get_info/', HTTP_AUTHORIZATION=f'Token {self.token2}')
+        self.assertContains(response, '', status_code=200)
+        self.assertEqual({
+            'username': 'user2',
+            'first_name': 'will',
+            'last_name': 'smith',
+            'email': 'test@sample.verify',
+            'password_login': True,
+            'photo': None,
+            'friends': [
+                {
+                    'friend': 'user1',
+                    'name': 'poppin pippin',
+                    'sent': 3,
+                    'received': 0,
+                    'last_message_id_sent': None,
+                    'last_message_status': None,
+                    'photo': None
+                }
+            ]
+        }, response.data['data'])
+
+
         user5 = get_user_model().objects.create_user(username='user5',
                                                      password='my_password5',
                                                      first_name='smill',
                                                      last_name='pill')
         Friend.objects.create(owner=self.user2, friend=user5, deleted=False, sent=5)
+        Friend.objects.create(friend=self.user2, owner=user5, deleted=False, sent=0)
 
         user6 = get_user_model().objects.create_user(username='user6',
                                                      password='my_password5',
                                                      first_name='smell',
                                                      last_name='pell')
-        Friend.objects.create(owner=self.user2, friend=user6, deleted=False, sent=2)
+        f6 = Friend.objects.create(owner=self.user2, friend=user6, deleted=False, sent=2)
+        Friend.objects.create(friend=self.user2, owner=user6, deleted=False, sent=0)
         f_user4.sent = 7
         f_user4.save()
 
@@ -616,6 +681,136 @@ class APIV2TestSuite(TestCase):
                     'last_message_id_sent': None,
                     'last_message_status': None,
                     'photo': None
+                },
+                {
+                    'friend': 'user1',
+                    'name': 'poppin pippin',
+                    'sent': 3,
+                    'received': 0,
+                    'last_message_id_sent': None,
+                    'last_message_status': None,
+                    'photo': None
+                },
+                {
+                    'friend': 'user6',
+                    'name': 'smell pell',
+                    'sent': 2,
+                    'received': 0,
+                    'last_message_id_sent': None,
+                    'last_message_status': None,
+                    'photo': None
+                }
+            ]
+        }, response.data['data'])
+
+        f6.name = 'smelly feet'
+        f6.save()
+
+        response = c.get('/v2/get_info/', HTTP_AUTHORIZATION=f'Token {self.token2}')
+        self.assertContains(response, '', status_code=200)
+        self.assertEqual({
+            'username': 'user2',
+            'first_name': 'will',
+            'last_name': 'smith',
+            'email': 'test@sample.verify',
+            'password_login': True,
+            'photo': None,
+            'friends': [
+                {
+                    'friend': 'user5',
+                    'name': 'smill pill',
+                    'sent': 5,
+                    'received': 0,
+                    'last_message_id_sent': None,
+                    'last_message_status': None,
+                    'photo': None
+                },
+                {
+                    'friend': 'user1',
+                    'name': 'poppin pippin',
+                    'sent': 3,
+                    'received': 0,
+                    'last_message_id_sent': None,
+                    'last_message_status': None,
+                    'photo': None
+                },
+                {
+                    'friend': 'user6',
+                    'name': 'smelly feet',
+                    'sent': 2,
+                    'received': 0,
+                    'last_message_id_sent': None,
+                    'last_message_status': None,
+                    'photo': None
+                }
+            ]
+        }, response.data['data'])
+
+        f6.name = None
+        f6.save()
+
+        Photo.objects.create(user=user5, photo='test')
+
+        response = c.get('/v2/get_info/', HTTP_AUTHORIZATION=f'Token {self.token2}')
+        self.assertContains(response, '', status_code=200)
+        self.assertEqual({
+            'username': 'user2',
+            'first_name': 'will',
+            'last_name': 'smith',
+            'email': 'test@sample.verify',
+            'password_login': True,
+            'photo': None,
+            'friends': [
+                {
+                    'friend': 'user5',
+                    'name': 'smill pill',
+                    'sent': 5,
+                    'received': 0,
+                    'last_message_id_sent': None,
+                    'last_message_status': None,
+                    'photo': 'test'
+                },
+                {
+                    'friend': 'user1',
+                    'name': 'poppin pippin',
+                    'sent': 3,
+                    'received': 0,
+                    'last_message_id_sent': None,
+                    'last_message_status': None,
+                    'photo': None
+                },
+                {
+                    'friend': 'user6',
+                    'name': 'smell pell',
+                    'sent': 2,
+                    'received': 0,
+                    'last_message_id_sent': None,
+                    'last_message_status': None,
+                    'photo': None
+                }
+            ]
+        }, response.data['data'])
+
+        Photo.objects.create(user=self.user2, photo='test2')
+
+        response = c.get('/v2/get_info/', HTTP_AUTHORIZATION=f'Token {self.token2}')
+        self.assertContains(response, '', status_code=200)
+        self.assertEqual({
+            'username': 'user2',
+            'first_name': 'will',
+            'last_name': 'smith',
+            'email': 'test@sample.verify',
+            'password_login': True,
+            'photo': 'test2',
+            'friends': [
+                {
+                    'friend': 'user5',
+                    'name': 'smill pill',
+                    'sent': 5,
+                    'received': 0,
+                    'last_message_id_sent': None,
+                    'last_message_status': None,
+                    'photo': 'test'
                 },
                 {
                     'friend': 'user1',

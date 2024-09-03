@@ -12,7 +12,7 @@ from django.contrib.auth.validators import ASCIIUsernameValidator
 from django.core.exceptions import ValidationError, PermissionDenied
 from django.core.validators import validate_email
 from django.db import transaction, IntegrityError
-from django.db.models import QuerySet
+from django.db.models import QuerySet, Q
 from django.views.decorators.csrf import ensure_csrf_cookie
 from firebase_admin import messaging
 from firebase_admin.exceptions import InvalidArgumentError
@@ -32,7 +32,7 @@ from v2.utils import build_response, flatten_friend
 
 logger = logging.getLogger(__name__)
 
-CLIENT_ID = '357995852275-tcfjuvtbrk3c57t5gsuc9a9jdfdn137s.apps.googleusercontent.com'
+CLIENT_ID = "357995852275-tcfjuvtbrk3c57t5gsuc9a9jdfdn137s.apps.googleusercontent.com"
 
 """
 For endpoints that require authentication, the required format is "Authorization: Token <token>" (that is, 
@@ -40,8 +40,8 @@ the Authorization header should be set to "Token <token>")
 """
 
 
-@api_view(['POST'])
-@require_params('fcm_token')
+@api_view(["POST"])
+@require_params("fcm_token")
 def register_device(request: Request) -> Response:
     """
     /v2/register_device/
@@ -58,14 +58,16 @@ def register_device(request: Request) -> Response:
 
     try:
         with transaction.atomic():
-            FCMTokens.objects.create(user=request.user, fcm_token=request.data['fcm_token'])
+            FCMTokens.objects.create(
+                user=request.user, fcm_token=request.data["fcm_token"]
+            )
     except IntegrityError:
-        return Response(build_response('That token is already registered'), status=400)
-    return Response(build_response('Token successfully registered'), status=200)
+        return Response(build_response("That token is already registered"), status=400)
+    return Response(build_response("Token successfully registered"), status=200)
 
 
-@api_view(['POST'])
-@require_params('fcm_token')
+@api_view(["POST"])
+@require_params("fcm_token")
 def unregister_device(request: Request) -> Response:
     """
     POST: Registers a device for receiving alerts for an account.
@@ -81,15 +83,17 @@ def unregister_device(request: Request) -> Response:
 
     try:
         with transaction.atomic():
-            FCMTokens.objects.get(user=request.user, fcm_token=request.data['fcm_token']).delete()
+            FCMTokens.objects.get(
+                user=request.user, fcm_token=request.data["fcm_token"]
+            ).delete()
     except FCMTokens.DoesNotExist:
-        return Response(build_response('That token is not registered'), status=400)
-    return Response(build_response('Token successfully unregistered'), status=200)
+        return Response(build_response("That token is not registered"), status=400)
+    return Response(build_response("Token successfully unregistered"), status=200)
 
 
-@api_view(['POST'])
+@api_view(["POST"])
 @permission_classes([AllowAny])
-@require_params('first_name', 'last_name', 'username', 'password', 'tos_agree')
+@require_params("first_name", "last_name", "username", "password", "tos_agree")
 def register_user(request: Request) -> Response:
     """
     /v2/register_user/
@@ -108,41 +112,49 @@ def register_user(request: Request) -> Response:
     Otherwise: status 200
     Returns no data.
     """
-    if request.data['tos_agree'] != 'yes':
-        return Response(build_response('You must agree to the terms of service to register an account'),
-                        status=400)
-    if len(request.data['password']) < 8:
-        return Response(build_response('Password must be at least 8 characters'), status=400)
+    if request.data["tos_agree"] != "yes":
+        return Response(
+            build_response(
+                "You must agree to the terms of service to register an account"
+            ),
+            status=400,
+        )
+    if len(request.data["password"]) < 8:
+        return Response(
+            build_response("Password must be at least 8 characters"), status=400
+        )
     try:
-        if 'email' in request.data and request.data['email'] != '':
-            validate_email(request.data.get('email'))
+        if "email" in request.data and request.data["email"] != "":
+            validate_email(request.data.get("email"))
         with transaction.atomic():
-            ASCIIUsernameValidator()(request.data['username'])
-            get_user_model().objects.create_user(first_name=request.data['first_name'],
-                                                 last_name=request.data['last_name'],
-                                                 username=request.data['username'],
-                                                 password=request.data['password'],
-                                                 email=request.data.get('email'))
+            ASCIIUsernameValidator()(request.data["username"])
+            get_user_model().objects.create_user(
+                first_name=request.data["first_name"],
+                last_name=request.data["last_name"],
+                username=request.data["username"],
+                password=request.data["password"],
+                email=request.data.get("email"),
+            )
     except IntegrityError as e:
         fields = []
-        unique_fields = ['username', 'email']
+        unique_fields = ["username", "email"]
         for arg in e.args:
             for field in unique_fields:
-                if f'v2_user.{field}' in arg:
+                if f"v2_user.{field}" in arg:
                     fields.append(field)
         if len(fields) > 0:
             return Response(build_response(f'{", ".join(fields)} taken'), status=400)
         else:
             logger.warning(e.args)
-            return Response(build_response('Invalid input'), status=400)
+            return Response(build_response("Invalid input"), status=400)
     except ValidationError as e:
         return Response(build_response(e.message), status=400)
-    return Response(build_response('User created'), status=200)
+    return Response(build_response("User created"), status=200)
 
 
-@api_view(['POST'])
+@api_view(["POST"])
 @permission_classes([AllowAny])
-@require_params('id_token')
+@require_params("id_token")
 def google_oauth(request: Request) -> Response:
     """
     /v2/google_auth/
@@ -160,56 +172,67 @@ def google_oauth(request: Request) -> Response:
     If the Google account token is invalid, returns status 403
     """
 
-    token = request.data['id_token']
+    token = request.data["id_token"]
     try:
         # Specify the CLIENT_ID of the app that accesses the backend:
         idinfo = id_token.verify_oauth2_token(token, requests.Request(), CLIENT_ID)
 
         # ID token is valid. Get the user's Google Account ID from the decoded token.
-        userid = idinfo['sub']
-        email = idinfo['email']
-        first_name = idinfo['given_name']
-        last_name = idinfo['family_name']
+        userid = idinfo["sub"]
+        email = idinfo["email"]
+        first_name = idinfo["given_name"]
+        last_name = idinfo["family_name"]
         user_set = get_user_model().objects.select_for_update().filter(google_id=userid)
-        bumped_user_set = get_user_model().objects.select_for_update().filter(email=email)
+        bumped_user_set = (
+            get_user_model().objects.select_for_update().filter(email=email)
+        )
         try:
             with transaction.atomic():
-                if 'username' in request.data:
-                    if 'tos_agree' not in request.data or request.data['tos_agree'] != 'yes':
-                        raise ValidationError('you must agree to terms of service')
-                    ASCIIUsernameValidator()(request.data['username'])
+                if "username" in request.data:
+                    if (
+                        "tos_agree" not in request.data
+                        or request.data["tos_agree"] != "yes"
+                    ):
+                        raise ValidationError("you must agree to terms of service")
+                    ASCIIUsernameValidator()(request.data["username"])
 
                     if len(bumped_user_set) != 0:
-                        assert(len(bumped_user_set) == 1)
+                        assert len(bumped_user_set) == 1
                         bumped_user_set[0].email = None
                         bumped_user_set[0].save()
 
-                    user = get_user_model().objects.create_user(first_name=first_name,
-                                                                last_name=last_name,
-                                                                username=request.data['username'],
-                                                                email=email,
-                                                                password=None)
+                    user = get_user_model().objects.create_user(
+                        first_name=first_name,
+                        last_name=last_name,
+                        username=request.data["username"],
+                        email=email,
+                        password=None,
+                    )
                     user.google_id = userid
                     user.save()
-                if user_set or 'username' in request.data:
+                if user_set or "username" in request.data:
                     token, _ = Token.objects.get_or_create(user=user_set.get())
-                    return Response({'token': token.key})
+                    return Response({"token": token.key})
                 else:
-                    return Response(build_response(message='Provide a username to create an account'),
-                                    status=401)
+                    return Response(
+                        build_response(
+                            message="Provide a username to create an account"
+                        ),
+                        status=401,
+                    )
 
         except IntegrityError:
-            return Response(build_response('Username taken'), status=400)
+            return Response(build_response("Username taken"), status=400)
         except ValidationError as e:
             return Response(build_response(e.message), status=400)
 
     except ValueError:
         # Invalid token
-        return Response(build_response('Invalid Google token provided'), status=403)
+        return Response(build_response("Invalid Google token provided"), status=403)
 
 
-@api_view(['POST'])
-@require_params('username')
+@api_view(["POST"])
+@require_params("username")
 def add_friend(request: Request) -> Response:
     """
     /v2/add_friend/
@@ -224,18 +247,49 @@ def add_friend(request: Request) -> Response:
     """
 
     try:
-        friend = get_user_model().objects.get(username=request.data['username'])
-        Friend.objects.update_or_create(owner=request.user, friend=friend, defaults={
-            'deleted': False})
-        return Response(build_response('Successfully added/restored friend'), status=200)
+        friend = get_user_model().objects.get(username=request.data["username"])
+        blocked = Friend.objects.filter(
+            owner=friend, friend=request.user, blocked=True
+        ).exists()
+        if blocked:
+            raise get_user_model().DoesNotExist
+        Friend.objects.update_or_create(
+            owner=request.user,
+            friend=friend,
+            defaults={"deleted": False, "blocked": False},
+        )
     except IntegrityError:
-        return Response(build_response('An error occurred when restoring friend'), status=400)
+        return Response(
+            build_response("An error occurred when restoring friend"), status=400
+        )
     except get_user_model().DoesNotExist:
-        return Response(build_response('User does not exist'), status=400)
+        return Response(build_response("User does not exist"), status=400)
+
+    tokens: QuerySet = FCMTokens.objects.filter(user__username=request.data["from"])
+
+    if bool(tokens):
+        for token in tokens:
+            message = messaging.Message(
+                data={
+                    "action": "friended",
+                    "friend": friend.username,
+                },
+                android=messaging.AndroidConfig(priority="normal"),
+                token=token.fcm_token,
+            )
+
+            try:
+                messaging.send(message)
+            except InvalidArgumentError as e:
+                logger.warning(f"An alert failed to send: {e.cause}")
+            except UnregisteredError:
+                token.delete()
+
+    return Response(build_response("Successfully added/restored friend"), status=200)
 
 
-@api_view(['PUT'])
-@require_params('username', 'new_name')
+@api_view(["PUT"])
+@require_params("username", "new_name")
 def edit_friend_name(request: Request) -> Response:
     """
     /v2/edit_friend_name/
@@ -262,21 +316,28 @@ def edit_friend_name(request: Request) -> Response:
     """
 
     try:
-        friend = get_user_model().objects.get(username=request.data['username'])
-        rel, created = Friend.objects.update_or_create(owner=request.user, friend=friend,
-                                                       defaults={'name': request.data['new_name']})
+        friend = get_user_model().objects.get(username=request.data["username"])
+        rel, created = Friend.objects.update_or_create(
+            owner=request.user,
+            friend=friend,
+            defaults={"name": request.data["new_name"]},
+        )
         if created:
             rel.deleted = True
             rel.save()
-        return Response(build_response('Successfully updated friend name'), status=200)
+        return Response(build_response("Successfully updated friend name"), status=200)
     except IntegrityError:
-        return Response(build_response('An error occurred when changing friend\'s name'), status=400)
+        return Response(
+            build_response("An error occurred when changing friend's name"), status=400
+        )
     except get_user_model().DoesNotExist:
-        return Response(build_response('An error occurred when restoring friend'), status=400)
+        return Response(
+            build_response("An error occurred when restoring friend"), status=400
+        )
 
 
-@api_view(['GET', 'HEAD'])
-@require_query_params('username')
+@api_view(["GET", "HEAD"])
+@require_query_params("username")
 def get_friend_name(request: Request) -> Response:
     """
     /v2/get_name/
@@ -293,16 +354,31 @@ def get_friend_name(request: Request) -> Response:
     """
 
     try:
-        friend = get_user_model().objects.get(username=request.query_params['username'])
+        friend = get_user_model().objects.get(username=request.query_params["username"])
+        blocked = Friend.objects.filter(
+            owner=friend, friend=request.user, blocked=True
+        ).exists()
+        if blocked:
+            raise get_user_model().DoesNotExist
         try:
             rel = Friend.objects.get(owner=request.user, friend=friend)
             if rel.name is not None:
-                return Response(build_response('Got name', {'name': rel.name}), status=200)
-            return Response(build_response('Got name', {'name': f'{friend.first_name} {friend.last_name}'}),
-                            status=200)
+                return Response(
+                    build_response("Got name", {"name": rel.name}), status=200
+                )
+            return Response(
+                build_response(
+                    "Got name", {"name": f"{friend.first_name} {friend.last_name}"}
+                ),
+                status=200,
+            )
         except Friend.DoesNotExist:
-            return Response(build_response('Got name', {'name': f'{friend.first_name} {friend.last_name}'}),
-                            status=200)
+            return Response(
+                build_response(
+                    "Got name", {"name": f"{friend.first_name} {friend.last_name}"}
+                ),
+                status=200,
+            )
     except get_user_model().DoesNotExist:
         return Response(build_response("Couldn't find user"), status=400)
 
@@ -319,16 +395,24 @@ def delete_friend(request: Request, username) -> Response:
     """
     try:
         with transaction.atomic():
-            friend = Friend.objects.select_for_update().get(owner=request.user, friend__username=username)
-            friend.deleted = True
-            friend.save()
-        return Response(build_response('Successfully deleted friend'), status=200)
+            Friend.objects.filter(owner=request.user, friend__username=username).update(
+                deleted=True
+            )
+            Friend.objects.update_or_create(
+                owner=username,
+                friend__username=request.user,
+                defaults={"deleted": True},
+            )
+        return Response(build_response("Successfully deleted friend"), status=200)
     except Friend.DoesNotExist:
-        return Response(build_response('Could not delete friend as you were not friends'), status=400)
+        return Response(
+            build_response("Could not delete friend as you were not friends"),
+            status=400,
+        )
 
 
-@api_view(['DELETE'])
-@require_params('username', 'password')
+@api_view(["DELETE"])
+@require_params("username", "password")
 def delete_user_data(request: Request) -> Response:
     """
     /v2/delete_user/data/
@@ -342,21 +426,23 @@ def delete_user_data(request: Request) -> Response:
     Returns no data.
     """
 
-    user = authenticate(username=request.data['username'], password=request.data['password'])
-    if request.user.username != request.data['username'] or user is None:
-        return Response(build_response('Forbidden'), status=403)
+    user = authenticate(
+        username=request.data["username"], password=request.data["password"]
+    )
+    if request.user.username != request.data["username"] or user is None:
+        return Response(build_response("Forbidden"), status=403)
 
     get_user_model().objects.get(username=request.user.username).delete()
-    return Response(build_response('Successfully deleted user data'), status=200)
+    return Response(build_response("Successfully deleted user data"), status=200)
 
 
 class EditUserThrottle(UserRateThrottle):
-    rate = '5/hour'
+    rate = "5/hour"
 
 
-@api_view(['PUT'])
+@api_view(["PUT"])
 @throttle_classes([EditUserThrottle] if not settings.IS_TESTING else [])
-@require_params('photo')
+@require_params("photo")
 def edit_photo(request: Request) -> Response:
     """
     /v2/edit/
@@ -377,34 +463,48 @@ def edit_photo(request: Request) -> Response:
     """
 
     try:
-        temp_image: Image.Image | None = Image.open(request.data['photo'])
+        temp_image: Image.Image | None = Image.open(request.data["photo"])
 
         if temp_image.width > temp_image.height:
             # image is wider than it is tall - size should be (128 * aspect ratio, 128)
-            size = ((Photo.PHOTO_SIZE * temp_image.width) // temp_image.height, Photo.PHOTO_SIZE)
+            size = (
+                (Photo.PHOTO_SIZE * temp_image.width) // temp_image.height,
+                Photo.PHOTO_SIZE,
+            )
         else:
             # image is taller than it is wide - size should be (128, 128 * aspect ratio)
-            size = (Photo.PHOTO_SIZE, (Photo.PHOTO_SIZE * temp_image.height) // temp_image.width)
-        temp_image = temp_image.resize(size=size, resample=Image.Resampling.LANCZOS) \
-            .crop(box=((size[0] - Photo.PHOTO_SIZE) // 2,  # we get the 128 x 128 square in the middle
-                       (size[1] - Photo.PHOTO_SIZE) // 2,
-                       (size[0] + Photo.PHOTO_SIZE) // 2,
-                       (size[1] + Photo.PHOTO_SIZE) // 2))
+            size = (
+                Photo.PHOTO_SIZE,
+                (Photo.PHOTO_SIZE * temp_image.height) // temp_image.width,
+            )
+        temp_image = temp_image.resize(
+            size=size, resample=Image.Resampling.LANCZOS
+        ).crop(
+            box=(
+                (size[0] - Photo.PHOTO_SIZE)
+                // 2,  # we get the 128 x 128 square in the middle
+                (size[1] - Photo.PHOTO_SIZE) // 2,
+                (size[0] + Photo.PHOTO_SIZE) // 2,
+                (size[1] + Photo.PHOTO_SIZE) // 2,
+            )
+        )
         temp_image = ImageOps.exif_transpose(temp_image)
         buffered = io.BytesIO()
-        temp_image.save(buffered, format='PNG', exif=temp_image.getexif())
-        photo, _ = Photo.objects.update_or_create(user=request.user, defaults={
-            'photo': base64.b64encode(buffered.getvalue()).decode()})
+        temp_image.save(buffered, format="PNG", exif=temp_image.getexif())
+        photo, _ = Photo.objects.update_or_create(
+            user=request.user,
+            defaults={"photo": base64.b64encode(buffered.getvalue()).decode()},
+        )
 
-        return Response(build_response('Profile photo updated'), status=200)
+        return Response(build_response("Profile photo updated"), status=200)
 
     except DecompressionBombError:
-        return Response(build_response('Profile picture was too large'), status=413)
+        return Response(build_response("Profile picture was too large"), status=413)
     except Exception as e:
-        return Response(build_response(f'Invalid photo: {e}'), status=400)
+        return Response(build_response(f"Invalid photo: {e}"), status=400)
 
 
-@api_view(['PUT'])
+@api_view(["PUT"])
 def edit_user(request: Request) -> Response:
     """
     /v2/edit/
@@ -420,69 +520,88 @@ def edit_user(request: Request) -> Response:
     """
 
     if settings.DEBUG:
-        logger.debug(f'Request: {request.body}')
+        logger.debug(f"Request: {request.body}")
 
     invalid_fields = {}
-    if 'username' in request.data:
+    if "username" in request.data:
         try:
-            ASCIIUsernameValidator()(request.data['username'])
+            ASCIIUsernameValidator()(request.data["username"])
         except ValidationError as e:
-            invalid_fields['username'] = e.message
+            invalid_fields["username"] = e.message
 
-    if 'email' in request.data and request.data['email'].strip():
+    if "email" in request.data and request.data["email"].strip():
         try:
-            validate_email(request.data['email'])
+            validate_email(request.data["email"])
         except ValidationError as e:
-            invalid_fields['email'] = e.message
+            invalid_fields["email"] = e.message
             logger.debug(f'Email: {request.data["email"]}')
 
-    if 'password' in request.data:
-        if 'old_password' not in request.data:
-            invalid_fields['old_password'] = 'to update password, `old_password` must be provided'
-        elif len(request.data['password']) < 8:
-            invalid_fields['password'] = 'password must be at least 8 characters'
+    if "password" in request.data:
+        if "old_password" not in request.data:
+            invalid_fields["old_password"] = (
+                "to update password, `old_password` must be provided"
+            )
+        elif len(request.data["password"]) < 8:
+            invalid_fields["password"] = "password must be at least 8 characters"
 
     if len(invalid_fields) != 0:
-        message = ', '.join([f'{x} ({invalid_fields[x]})' for x in invalid_fields])
+        message = ", ".join([f"{x} ({invalid_fields[x]})" for x in invalid_fields])
         logger.info(message)
-        return Response(build_response(
-            f'Could not update user: invalid value{"s" if len(invalid_fields) != 1 else ""} for {message}'), status=400)
+        return Response(
+            build_response(
+                f'Could not update user: invalid value{"s" if len(invalid_fields) != 1 else ""} for {message}'
+            ),
+            status=400,
+        )
     invalid_field = None
     try:
         with transaction.atomic():
-            user = get_user_model().objects.select_for_update().get(username=request.user.username)
-            if 'username' in request.data:
-                invalid_field = 'username'
-                user.username = request.data['username']
-            if 'first_name' in request.data:
-                user.first_name = request.data['first_name']
-            if 'last_name' in request.data:
-                user.last_name = request.data['last_name']
-            if 'email' in request.data:
-                invalid_field = 'email'
-                user.email = request.data['email']
-            if 'password' in request.data:
-                assert (len(request.data['password']) >= 8)
-                assert ('old_password' in request.data)
-                check_pass = authenticate(username=request.user.username, password=request.data['old_password'])
+            user = (
+                get_user_model()
+                .objects.select_for_update()
+                .get(username=request.user.username)
+            )
+            if "username" in request.data:
+                invalid_field = "username"
+                user.username = request.data["username"]
+            if "first_name" in request.data:
+                user.first_name = request.data["first_name"]
+            if "last_name" in request.data:
+                user.last_name = request.data["last_name"]
+            if "email" in request.data:
+                invalid_field = "email"
+                user.email = request.data["email"]
+            if "password" in request.data:
+                assert len(request.data["password"]) >= 8
+                assert "old_password" in request.data
+                check_pass = authenticate(
+                    username=request.user.username,
+                    password=request.data["old_password"],
+                )
                 if check_pass is not None:
-                    user.set_password(request.data['password'])
+                    user.set_password(request.data["password"])
                     Token.objects.get(user=user).delete()
                     FCMTokens.objects.filter(user=user).delete()
                     Token.objects.create(user=user)
                 else:
-                    raise PermissionDenied('Invalid password')
+                    raise PermissionDenied("Invalid password")
             user.save()
             update_session_auth_hash(request, user)
-            return Response(build_response('User updated successfully', data={"token": Token.objects.get(user=user).key}), status=200)
+            return Response(
+                build_response(
+                    "User updated successfully",
+                    data={"token": Token.objects.get(user=user).key},
+                ),
+                status=200,
+            )
     except PermissionDenied:
-        return Response(build_response('Incorrect old password'), status=401)
+        return Response(build_response("Incorrect old password"), status=401)
     except IntegrityError:
-        return Response(build_response(f'{invalid_field} in use'), status=400)
+        return Response(build_response(f"{invalid_field} in use"), status=400)
 
 
-@api_view(['POST'])
-@require_params('password', 'id_token')
+@api_view(["POST"])
+@require_params("password", "id_token")
 def link_google_account(request: Request) -> Response:
     """
     /v2/link_google_account/
@@ -498,11 +617,13 @@ def link_google_account(request: Request) -> Response:
     """
 
     user = request.user
-    token = request.data['id_token']
+    token = request.data["id_token"]
 
-    check_pass = authenticate(username=request.user.username, password=request.data['password'])
+    check_pass = authenticate(
+        username=request.user.username, password=request.data["password"]
+    )
     if check_pass is None:
-        return Response(build_response('Incorrect old password'), status=403)
+        return Response(build_response("Incorrect old password"), status=403)
 
     try:
         with transaction.atomic():
@@ -511,24 +632,27 @@ def link_google_account(request: Request) -> Response:
             id_info = id_token.verify_oauth2_token(token, requests.Request(), CLIENT_ID)
 
             # ID token is valid. Get the user's Google Account ID from the decoded token.
-            user_id = id_info['sub']
+            user_id = id_info["sub"]
             user.google_id = user_id
             user.save()
 
     except ValueError:
-        return Response(build_response('Invalid Google account'), status=403)
+        return Response(build_response("Invalid Google account"), status=403)
     except IntegrityError:
-        return Response(build_response('Google account is already linked to another account'), status=400)
+        return Response(
+            build_response("Google account is already linked to another account"),
+            status=400,
+        )
 
-    return Response(build_response('Google account linked successfully'), status=200)
+    return Response(build_response("Google account linked successfully"), status=200)
 
 
-@api_view(['GET', 'HEAD'])
+@api_view(["GET", "HEAD"])
 def test_auth(request: Request) -> Response:
     return Response(data="Success", status=200)
 
 
-@api_view(['GET', 'HEAD'])
+@api_view(["GET", "HEAD"])
 def get_user_info(request: Request) -> Response:
     """
     /v2/get_info/
@@ -563,27 +687,41 @@ def get_user_info(request: Request) -> Response:
     friends field is sorted by sent in descending order
     """
     user = request.user
-    friends = [flatten_friend(x) for x in Friend.objects.select_related('friend__photo')
-                                                        .filter(owner=user, deleted=False).order_by('-sent')]
+    # TODO also add any friends that are friends with this user but this user is not friends with, and put them in pending friends
+    friends = get_user_model().objects.filter(
+        Q(friend_set__friend=user, friend_set__deleted=False, friend_set__blocked=False)
+        & Q(
+            friend_of_set__owner=user,
+            friend_of_set__deleted=False,
+            friend_of_set__blocked=False,
+        )
+    )
+    friends = [
+        flatten_friend(x)
+        for x in Friend.objects.select_related("friend__photo")
+        .filter(owner=user, friend__in=friends)
+        .order_by("-sent")
+    ]
+
     data = {
-        'username': user.username,
-        'first_name': user.first_name,
-        'last_name': user.last_name,
-        'email': user.email,
-        'password_login': user.google_id is None,
-        'photo': user.photo.photo if hasattr(user, 'photo') else None,
-        'friends': friends,
+        "username": user.username,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "email": user.email,
+        "password_login": user.google_id is None,
+        "photo": user.photo.photo if hasattr(user, "photo") else None,
+        "friends": friends,
     }
-    return Response(build_response('Got user data', data=data), status=200)
+    return Response(build_response("Got user data", data=data), status=200)
 
 
 class AlertThrottle(UserRateThrottle):
-    rate = '15/min'
+    rate = "15/min"
 
 
-@api_view(['POST'])
+@api_view(["POST"])
 @throttle_classes([AlertThrottle] if not settings.IS_TESTING else [])
-@require_params('to')
+@require_params("to")
 def send_alert(request: Request) -> Response:
     """
     /v2/send_alert/
@@ -604,62 +742,76 @@ def send_alert(request: Request) -> Response:
         'id': <alert id>
     }
     """
-    # unauthenticated requests should be denied automatically - test this
 
-    to: str = request.data['to']
+    to: str = request.data["to"]
 
     alert_id = str(time.time())
     timestamp = int(time.time())
     try:
-        friend = Friend.objects.get(owner__username=to, friend__username=request.user.username, deleted=False)
+        friend = Friend.objects.get(
+            owner__username=to, friend__username=request.user.username, deleted=False, blocked=False
+        )
         friend.received += 1
         friend.save()
-        friend, created = Friend.objects.get_or_create(owner__username=request.user.username, friend__username=to,
-                                                       defaults={'deleted': True})
+        friend, _ = Friend.objects.get_or_create(
+            owner__username=request.user.username,
+            friend__username=to,
+            defaults={"deleted": True},
+        )
         friend.sent += 1
         friend.last_sent_alert_id = alert_id
         friend.last_sent_message_status = Friend.SENT
         friend.save()
     except Friend.DoesNotExist:
-        return Response(build_response(f'Could not send message as {to} does not have you as a friend'),
-                        status=403)
+        return Response(
+            build_response(
+                f"Could not send message as {to} does not have you as a friend"
+            ),
+            status=403,
+        )
 
     tokens: QuerySet = FCMTokens.objects.filter(user__username=to)
     if not bool(tokens):
-        return Response(build_response(f'Could not find devices belonging to user {to}'), status=400)
+        return Response(
+            build_response(f"Could not find devices belonging to user {to}"), status=400
+        )
 
     at_least_one_success: bool = False
     for token in tokens:
         message = messaging.Message(
             data={
-                'action': 'alert',
-                'alert_id': alert_id,
-                'alert_to': request.data['to'],
-                'alert_from': request.user.username,
-                'alert_message': str(request.data['message']) if 'message' in request.data else "None",
-                'alert_timestamp': str(timestamp)
+                "action": "alert",
+                "alert_id": alert_id,
+                "alert_to": request.data["to"],
+                "alert_from": request.user.username,
+                "alert_message": (
+                    str(request.data["message"])
+                    if "message" in request.data
+                    else "None"
+                ),
+                "alert_timestamp": str(timestamp),
             },
-            android=messaging.AndroidConfig(
-                priority='high'
-            ),
-            token=token.fcm_token
+            android=messaging.AndroidConfig(priority="high"),
+            token=token.fcm_token,
         )
 
         try:
             messaging.send(message)
             at_least_one_success = True
         except InvalidArgumentError as e:
-            logger.warning(f'An alert failed to send: {e.cause}')
+            logger.warning(f"An alert failed to send: {e.cause}")
         except UnregisteredError:
             token.delete()
 
     if not at_least_one_success:
         return Response(build_response(f"Unable to send message"), status=400)
-    return Response(build_response("Successfully sent message", data={'id': alert_id}), status=200)
+    return Response(
+        build_response("Successfully sent message", data={"id": alert_id}), status=200
+    )
 
 
-@api_view(['POST'])
-@require_params('alert_id', 'from')
+@api_view(["POST"])
+@require_params("alert_id", "from")
 def alert_delivered(request: Request) -> Response:
     """
     /v2/alert_delivered/
@@ -674,9 +826,11 @@ def alert_delivered(request: Request) -> Response:
 
     try:
         with transaction.atomic():
-            friend = Friend.objects.select_for_update().get(owner__username=request.data['from'],
-                                                            friend__username=request.user.username,
-                                                            last_sent_alert_id=request.data['alert_id'])
+            friend = Friend.objects.select_for_update().get(
+                owner__username=request.data["from"],
+                friend__username=request.user.username,
+                last_sent_alert_id=request.data["alert_id"],
+            )
             if friend.last_sent_message_status == Friend.SENT:
                 friend.last_sent_message_status = Friend.DELIVERED
                 friend.save()
@@ -685,31 +839,29 @@ def alert_delivered(request: Request) -> Response:
     except Friend.DoesNotExist:
         return Response(build_response("Delivered message was not the last sent"))
 
-    tokens: QuerySet = FCMTokens.objects.filter(user__username=request.data['from'])
+    tokens: QuerySet = FCMTokens.objects.filter(user__username=request.data["from"])
 
     if not bool(tokens):
         logger.warning("Could not find tokens for recipient")
-        return Response(build_response(f'An error occurred'), status=500)
+        return Response(build_response(f"An error occurred"), status=500)
 
     at_least_one_success: bool = False
     for token in tokens:
         message = messaging.Message(
             data={
-                'action': 'delivered',
-                'alert_id': request.data['alert_id'],
-                'username_to': request.user.username,
+                "action": "delivered",
+                "alert_id": request.data["alert_id"],
+                "username_to": request.user.username,
             },
-            android=messaging.AndroidConfig(
-                priority='normal'
-            ),
-            token=token.fcm_token
+            android=messaging.AndroidConfig(priority="normal"),
+            token=token.fcm_token,
         )
 
         try:
             messaging.send(message)
             at_least_one_success = True
         except InvalidArgumentError as e:
-            logger.warning(f'An alert failed to send: {e.cause}')
+            logger.warning(f"An alert failed to send: {e.cause}")
         except UnregisteredError:
             token.delete()
 
@@ -718,8 +870,8 @@ def alert_delivered(request: Request) -> Response:
     return Response(build_response("Successfully sent delivery status"), status=200)
 
 
-@api_view(['POST'])
-@require_params('alert_id', 'from', 'fcm_token')
+@api_view(["POST"])
+@require_params("alert_id", "from", "fcm_token")
 def alert_read(request: Request) -> Response:
     """
     /v2/alert_read/
@@ -734,9 +886,11 @@ def alert_read(request: Request) -> Response:
 
     try:
         with transaction.atomic():
-            friend = Friend.objects.select_for_update().get(owner__username=request.data['from'],
-                                                            friend__username=request.user.username,
-                                                            last_sent_alert_id=request.data['alert_id'])
+            friend = Friend.objects.select_for_update().get(
+                owner__username=request.data["from"],
+                friend__username=request.user.username,
+                last_sent_alert_id=request.data["alert_id"],
+            )
             if friend.last_sent_message_status != Friend.READ:
                 friend.last_sent_message_status = Friend.READ
                 friend.save()
@@ -745,32 +899,35 @@ def alert_read(request: Request) -> Response:
     except Friend.DoesNotExist:
         return Response(build_response("Read message was not the last sent"))
 
-    tokens: QuerySet = FCMTokens.objects.filter(user__username=request.user.username).exclude(fcm_token=request.data[
-        'fcm_token']).union(FCMTokens.objects.filter(user__username=request.data['from']))
+    tokens: QuerySet = (
+        FCMTokens.objects.filter(user__username=request.user.username)
+        .exclude(fcm_token=request.data["fcm_token"])
+        .union(FCMTokens.objects.filter(user__username=request.data["from"]))
+    )
 
     if not bool(tokens):
-        logger.warning("Could not find tokens for recipient or the users' other devices")
-        return Response(build_response(f'An error occurred'), status=500)
+        logger.warning(
+            "Could not find tokens for recipient or the users' other devices"
+        )
+        return Response(build_response(f"An error occurred"), status=500)
 
     at_least_one_success: bool = False
     for token in tokens:
         message = messaging.Message(
             data={
-                'action': 'read',
-                'alert_id': request.data['alert_id'],
-                'username_to': request.user.username,
+                "action": "read",
+                "alert_id": request.data["alert_id"],
+                "username_to": request.user.username,
             },
-            android=messaging.AndroidConfig(
-                priority='normal'
-            ),
-            token=token.fcm_token
+            android=messaging.AndroidConfig(priority="normal"),
+            token=token.fcm_token,
         )
 
         try:
             messaging.send(message)
             at_least_one_success = True
         except InvalidArgumentError as e:
-            logger.warning(f'An alert failed to send: {e.cause}')
+            logger.warning(f"An alert failed to send: {e.cause}")
         except UnregisteredError:
             token.delete()
 
@@ -779,7 +936,7 @@ def alert_read(request: Request) -> Response:
     return Response(build_response("Successfully sent read status"), status=200)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([AllowAny])
 @ensure_csrf_cookie
 def set_csrf_token(request):
@@ -789,16 +946,16 @@ def set_csrf_token(request):
     return Response(build_response("Set token"), status=200)
 
 
-@api_view(['POST'])
+@api_view(["POST"])
 @permission_classes([AllowAny])
-@require_params('username', 'password')
+@require_params("username", "password")
 def login_session(request):
     """
     This will be `/api/login/` on `urls.py`
     """
     data = request.data
-    username = data['username']
-    password = data['password']
+    username = data["username"]
+    password = data["password"]
     user = authenticate(username=username, password=password)
     if user is not None:
         login(request, user)
