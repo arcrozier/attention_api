@@ -30,6 +30,7 @@ urlpatterns = [
     path('register_user/', views.register_user),
     path('add_friend/', views.add_friend),
     path('get_name/', views.get_friend_name),
+    path('block_user/', views.block_user),
     path('delete_friend/<str:username>/', views.delete_friend),
     path('edit/', views.edit_user),
     path('photo/', views.edit_photo),

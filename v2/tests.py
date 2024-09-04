@@ -16,7 +16,7 @@ from v2.utils import check_params
 
 # Create your tests here.
 
-auth_required_post_endpoints = ['send_alert', 'register_device', 'add_friend', 'alert_read', 'alert_delivered']
+auth_required_post_endpoints = ['send_alert', 'register_device', 'add_friend', 'alert_read', 'alert_delivered', 'block_user']
 auth_required_get_endpoints = ['get_name', 'get_info']
 auth_required_delete_endpoints = ['delete_friend/friend', 'delete_user_data']
 auth_required_put_endpoints = ['edit', 'edit_friend_name']
@@ -307,6 +307,15 @@ class APIV2TestSuite(TestCase):
         )
         self.assertTrue(friend.blocked)
 
+        token4 = Token.objects.create(user=user4)
+        response = c.post("/v2/add_friend/", {"username": "user1"}, HTTP_AUTHORIZATION=f"Token {token4}")
+        self.assertContains(response, "", status_code=200)
+        friend: Friend = Friend.objects.get(
+            owner__username="user4", friend__username="user1"
+        )
+        self.assertFalse(friend.blocked)
+        self.assertFalse(friend.deleted)
+
     def test_get_friend_name(self):
         c = Client()
         response = c.get('/v2/get_name/', {'username': 'user2'}, HTTP_AUTHORIZATION=f'Token {self.token1}')
@@ -343,6 +352,24 @@ class APIV2TestSuite(TestCase):
             HTTP_AUTHORIZATION=f"Token {self.token1}",
         )
         self.assertContains(response, "", status_code=400)
+
+    def test_block_user(self):
+        c = Client()
+
+        # try blocking a user we're currently friends with
+        response = c.post('/v2/block_user/', {"username": "user1"}, HTTP_AUTHORIZATION=f"Token {self.token2}")
+        self.assertContains(response, "", status_code=200)
+        self.assertTrue(Friend.objects.get(owner=self.user2, friend=self.user1).blocked)
+        self.assertTrue(Friend.objects.get(owner=self.user2, friend=self.user1).deleted)
+
+        Friend.objects.filter(owner=self.user2, friend=self.user1).update(blocked=False, deleted=False)
+
+        # try blocking a user who is friends with us
+        response = c.post('/v2/block_user/', {"username": "user2"}, HTTP_AUTHORIZATION=f"Token {self.token1}")
+        self.assertContains(response, "", status_code=200)
+        self.assertTrue(Friend.objects.get(owner=self.user1, friend=self.user2).blocked)
+        self.assertTrue(Friend.objects.get(owner=self.user1, friend=self.user2).deleted)
+        self.assertTrue(Friend.objects.get(owner=self.user2, friend=self.user1).deleted)
 
     def test_delete_friend(self):
         c = Client()
