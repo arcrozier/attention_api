@@ -265,7 +265,7 @@ def add_friend(request: Request) -> Response:
     except get_user_model().DoesNotExist:
         return Response(build_response("User does not exist"), status=400)
 
-    tokens: QuerySet = FCMTokens.objects.filter(user__username=request.data["from"])
+    tokens: QuerySet = FCMTokens.objects.filter(user=friend)
 
     if bool(tokens):
         for token in tokens:
@@ -383,7 +383,24 @@ def get_friend_name(request: Request) -> Response:
         return Response(build_response("Couldn't find user"), status=400)
 
 
-@api_view(['DELETE'])
+@api_view(["POST"])
+@require_params("username")
+def block_user(request: Request) -> Response:
+    try:
+        blockee = get_user_model().objects.get(username=request.data["username"])
+        blocked = Friend.objects.filter(
+            owner=blockee, friend=request.user, blocked=True
+        ).exists()
+        if blocked:
+            raise get_user_model().DoesNotExist
+        Friend.objects.update_or_create(owner=request.user, friend=blockee, defaults={'blocked': True, 'deleted': True})
+        Friend.objects.filter(owner=blockee, friend=request.user).update(deleted=True)
+        return Response(build_response("Blocked user"), status=200)
+    except get_user_model().DoesNotExist:
+        return Response(build_response("Couldn't find user"), status=400)
+
+
+@api_view(["DELETE"])
 def delete_friend(request: Request, username) -> Response:
     """
     /v2/delete_friend/<str:username>/
@@ -395,12 +412,17 @@ def delete_friend(request: Request, username) -> Response:
     """
     try:
         with transaction.atomic():
-            Friend.objects.filter(owner=request.user, friend__username=username).update(
-                deleted=True
-            )
+            if (
+                updated := Friend.objects.filter(
+                    owner=request.user, friend__username=username
+                ).update(deleted=True)
+            ) != 1:
+                assert updated == 0
+                raise Friend.DoesNotExist
+            friend = get_user_model().objects.get(username=username)
             Friend.objects.update_or_create(
-                owner=username,
-                friend__username=request.user,
+                owner=friend,
+                friend=request.user,
                 defaults={"deleted": True},
             )
         return Response(build_response("Successfully deleted friend"), status=200)
@@ -681,14 +703,21 @@ def get_user_info(request: Request) -> Response:
                 photo: <friend's profile photo, base64 encoded, RGBA-8888, or null if not set>
             },
             ...
+        ],
+        pending_friends: [
+            {
+                username: <pending friend's username>,
+                name: <pending friend's name (this is their chosen name, ignores any custom names you gave them)>,
+                photo: <pending friend's photo>
+            }
         ]
     }
 
     friends field is sorted by sent in descending order
     """
     user = request.user
-    # TODO also add any friends that are friends with this user but this user is not friends with, and put them in pending friends
-    friends = get_user_model().objects.filter(
+
+    friends_query = get_user_model().objects.filter(
         Q(friend_set__friend=user, friend_set__deleted=False, friend_set__blocked=False)
         & Q(
             friend_of_set__owner=user,
@@ -699,8 +728,30 @@ def get_user_info(request: Request) -> Response:
     friends = [
         flatten_friend(x)
         for x in Friend.objects.select_related("friend__photo")
-        .filter(owner=user, friend__in=friends)
+        .filter(owner=user, friend__in=friends_query)
         .order_by("-sent")
+    ]
+
+    pending_friends = [
+        {
+            "username": friend.username,
+            "name": f"{friend.first_name} {friend.last_name}",
+            "photo": friend.photo.photo if hasattr(friend, "photo") else None,
+        }
+        for friend in get_user_model()
+        .objects.filter(
+            Q(
+                friend_set__friend=user,
+                friend_set__deleted=False,
+                friend_set__blocked=False,
+            )
+        )
+        .prefetch_related("photo")
+        .intersection(get_user_model().objects.filter(~Q(
+                friend_of_set__owner=user,
+                friend_of_set__blocked=True,
+            )))
+        .difference(friends_query)
     ]
 
     data = {
@@ -711,6 +762,7 @@ def get_user_info(request: Request) -> Response:
         "password_login": user.google_id is None,
         "photo": user.photo.photo if hasattr(user, "photo") else None,
         "friends": friends,
+        "pending_friends": pending_friends,
     }
     return Response(build_response("Got user data", data=data), status=200)
 
@@ -749,7 +801,10 @@ def send_alert(request: Request) -> Response:
     timestamp = int(time.time())
     try:
         friend = Friend.objects.get(
-            owner__username=to, friend__username=request.user.username, deleted=False, blocked=False
+            owner__username=to,
+            friend__username=request.user.username,
+            deleted=False,
+            blocked=False,
         )
         friend.received += 1
         friend.save()

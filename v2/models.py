@@ -51,7 +51,7 @@ class Friend(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.owner} -> {self.friend}"
+        return f"{self.owner} {'!' if self.blocked else 'x' if self.deleted else ''}-> {self.friend}"
 
 
 class FCMTokens(models.Model):

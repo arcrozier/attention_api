@@ -294,6 +294,19 @@ class APIV2TestSuite(TestCase):
         self.assertContains(response, '', status_code=400)
         self.assertEqual(self.user1.friend_set.count(), 2)
 
+        # You can't add users who have blocked you
+        Friend.objects.create(owner=user4, friend=self.user1, blocked=True)
+        response = c.post(
+            "/v2/add_friend/",
+            {"username": "user4"},
+            HTTP_AUTHORIZATION=f"Token {self.token1}",
+        )
+        self.assertContains(response, "", status_code=400)
+        friend: Friend = Friend.objects.get(
+            owner__username="user4", friend__username="user1"
+        )
+        self.assertTrue(friend.blocked)
+
     def test_get_friend_name(self):
         c = Client()
         response = c.get('/v2/get_name/', {'username': 'user2'}, HTTP_AUTHORIZATION=f'Token {self.token1}')
@@ -321,9 +334,19 @@ class APIV2TestSuite(TestCase):
                          HTTP_AUTHORIZATION=f'Token {self.token1}')
         self.assertContains(response, '', status_code=400)
 
+        # You can't look up someone who has blocked you
+        Friend.objects.create(owner=user4, friend=self.user1, blocked=True)
+
+        response = c.get(
+            "/v2/get_name/",
+            {"username": "user4"},
+            HTTP_AUTHORIZATION=f"Token {self.token1}",
+        )
+        self.assertContains(response, "", status_code=400)
+
     def test_delete_friend(self):
         c = Client()
-        get_user_model().objects.create_user(username='user4', password='my_password4', first_name='will', last_name='smith')
+        user4 = get_user_model().objects.create_user(username='user4', password='my_password4', first_name='will', last_name='smith')
         response = c.delete('/v2/delete_friend/user1/', HTTP_AUTHORIZATION=f'Token {self.token2}',
                             content_type='application/json')
         self.assertContains(response, '', status_code=200)
@@ -335,6 +358,20 @@ class APIV2TestSuite(TestCase):
         self.assertContains(response, '', status_code=400)
         self.assertFalse(Friend.objects.filter(owner__username='user1', friend__username='user4').exists())
 
+        # user2 is not friends with user4, but user4 is friends with user2
+        Friend.objects.create(owner=user4, friend=self.user2)
+        response = c.delete(
+            "/v2/delete_friend/user4/",
+            HTTP_AUTHORIZATION=f"Token {self.token2}",
+            content_type="application/json",
+        )
+        self.assertContains(response, "", status_code=400)
+        self.assertFalse(
+            Friend.objects.filter(
+                owner__username="user1", friend__username="user4"
+            ).exists()
+        )
+
         # User does not exist
         response = c.delete('/v2/delete_friend/user_does_not_exist/',
                             HTTP_AUTHORIZATION=f'Token {self.token2}', content_type='application/json')
@@ -344,6 +381,8 @@ class APIV2TestSuite(TestCase):
 
         friend.deleted = False
         friend.save()
+
+        # no username specified in URL
         response = c.delete('/v2/delete_friend/', HTTP_AUTHORIZATION=f'Token {self.token2}',
                             content_type='application/json')
         self.assertContains(response, '', status_code=404)
@@ -351,6 +390,8 @@ class APIV2TestSuite(TestCase):
 
         at_user4 = get_user_model().objects.create_user(username='@_user4', password='my_password4', first_name='will',
                                                         last_name='smith')
+
+        # user2 is friends with @_user4 but @_user4 is not friends with user2
         Friend.objects.create(owner=self.user2, friend=at_user4)
         response = c.delete('/v2/delete_friend/@_user4/', HTTP_AUTHORIZATION=f'Token {self.token2}',
                             content_type='application/json')
@@ -557,6 +598,7 @@ class APIV2TestSuite(TestCase):
         self.maxDiff = None
         c = Client()
 
+        # user2 -> user1
         user4 = get_user_model().objects.create_user(username='user4',
                                                      password='my_password4',
                                                      first_name='will',
@@ -564,32 +606,39 @@ class APIV2TestSuite(TestCase):
         f_user4 = Friend.objects.create(owner=self.user2, friend=user4, deleted=True)
         Friend.objects.create(owner=self.user1, friend=self.user2)
 
-        response = c.get('/v2/get_info/', HTTP_AUTHORIZATION=f'Token {self.token2}')
+        # user1 <-> user2
+        # basic test
+        response = c.get("/v2/get_info/", HTTP_AUTHORIZATION=f"Token {self.token2}")
         self.assertContains(response, '', status_code=200)
-        self.assertEqual({
-            'username': 'user2',
-            'first_name': 'will',
-            'last_name': 'smith',
-            'email': 'test@sample.verify',
-            'password_login': True,
-            'photo': None,
-            'friends': [
-                {
-                    'friend': 'user1',
-                    'name': 'poppin pippin',
-                    'sent': 3,
-                    'received': 0,
-                    'last_message_id_sent': None,
-                    'last_message_status': None,
-                    'photo': None
-                }
-            ]
-        }, response.data['data'])
+        self.assertEqual(
+            {
+                "username": "user2",
+                "first_name": "will",
+                "last_name": "smith",
+                "email": "test@sample.verify",
+                "password_login": True,
+                "photo": None,
+                "friends": [
+                    {
+                        "friend": "user1",
+                        "name": "poppin pippin",
+                        "sent": 3,
+                        "received": 0,
+                        "last_message_id_sent": None,
+                        "last_message_status": None,
+                        "photo": None,
+                    }
+                ],
+                "pending_friends": [],
+            },
+            response.data["data"],
+        )
 
         Friend.objects.create(owner=user4, friend=self.user2)
         f_user4.deleted = False
         f_user4.save()
 
+        # user1 <-> user2, user2 <-> user4
         response = c.get('/v2/get_info/', HTTP_AUTHORIZATION=f'Token {self.token2}')
         self.assertContains(response, '', status_code=200)
         self.assertEqual({
@@ -618,42 +667,151 @@ class APIV2TestSuite(TestCase):
                     'last_message_status': None,
                     'photo': None
                 }
-            ]
+            ],
+            'pending_friends': []
         }, response.data['data'])
 
         f_user4.blocked = True
         f_user4.save()
 
-        response = c.get('/v2/get_info/', HTTP_AUTHORIZATION=f'Token {self.token2}')
+        # user1 <-> user2, user2 <-! user4 (user4 shouldn't show up in pending friends because user2 blocked them)
+        response = c.get("/v2/get_info/", HTTP_AUTHORIZATION=f"Token {self.token2}")
         self.assertContains(response, '', status_code=200)
-        self.assertEqual({
-            'username': 'user2',
-            'first_name': 'will',
-            'last_name': 'smith',
-            'email': 'test@sample.verify',
-            'password_login': True,
-            'photo': None,
-            'friends': [
-                {
-                    'friend': 'user1',
-                    'name': 'poppin pippin',
-                    'sent': 3,
-                    'received': 0,
-                    'last_message_id_sent': None,
-                    'last_message_status': None,
-                    'photo': None
-                }
-            ]
-        }, response.data['data'])
-
+        self.assertEqual(
+            {
+                "username": "user2",
+                "first_name": "will",
+                "last_name": "smith",
+                "email": "test@sample.verify",
+                "password_login": True,
+                "photo": None,
+                "friends": [
+                    {
+                        "friend": "user1",
+                        "name": "poppin pippin",
+                        "sent": 3,
+                        "received": 0,
+                        "last_message_id_sent": None,
+                        "last_message_status": None,
+                        "photo": None,
+                    }
+                ],
+                "pending_friends": [],
+            },
+            response.data["data"],
+        )
 
         user5 = get_user_model().objects.create_user(username='user5',
                                                      password='my_password5',
                                                      first_name='smill',
                                                      last_name='pill')
-        Friend.objects.create(owner=self.user2, friend=user5, deleted=False, sent=5)
-        Friend.objects.create(friend=self.user2, owner=user5, deleted=False, sent=0)
 
+        Friend.objects.create(friend=self.user2, owner=user5, deleted=False, sent=0)
+        # user1 <-> user2, user2 <-! user4, user2 <- user5
+        # check that pending friends show up
+        response = c.get("/v2/get_info/", HTTP_AUTHORIZATION=f"Token {self.token2}")
+        self.assertContains(response, "", status_code=200)
+        self.assertEqual(
+            {
+                "username": "user2",
+                "first_name": "will",
+                "last_name": "smith",
+                "email": "test@sample.verify",
+                "password_login": True,
+                "photo": None,
+                "friends": [
+                    {
+                        "friend": "user1",
+                        "name": "poppin pippin",
+                        "sent": 3,
+                        "received": 0,
+                        "last_message_id_sent": None,
+                        "last_message_status": None,
+                        "photo": None,
+                    },
+                ],
+                "pending_friends": [
+                    {
+                        "username": "user5",
+                        "name": "smill pill",
+                        "photo": None
+                    }
+                ],
+            },
+            response.data["data"],
+        )
+
+        Friend.objects.create(owner=self.user2, friend=user5, deleted=True, sent=5)
+
+        # user1 <-> user2, user2 <-! user4, user2 <- user5
+        # check that deleted friends show up in pending friends
+        response = c.get("/v2/get_info/", HTTP_AUTHORIZATION=f"Token {self.token2}")
+        self.assertContains(response, "", status_code=200)
+        self.assertEqual(
+            {
+                "username": "user2",
+                "first_name": "will",
+                "last_name": "smith",
+                "email": "test@sample.verify",
+                "password_login": True,
+                "photo": None,
+                "friends": [
+                    {
+                        "friend": "user1",
+                        "name": "poppin pippin",
+                        "sent": 3,
+                        "received": 0,
+                        "last_message_id_sent": None,
+                        "last_message_status": None,
+                        "photo": None,
+                    },
+                ],
+                "pending_friends": [
+                    {"username": "user5", "name": "smill pill", "photo": None}
+                ],
+            },
+            response.data["data"],
+        )
+
+        Friend.objects.filter(owner=self.user2, friend=user5).update(
+            deleted=False, blocked=True
+        )  
+
+        # user1 <-> user2, user2 <-! user4, user2 <-! user5
+        # check that blocked users don't show up in pending friends, even if they aren't marked as deleted
+        response = c.get("/v2/get_info/", HTTP_AUTHORIZATION=f"Token {self.token2}")
+        self.assertContains(response, "", status_code=200)
+        self.assertEqual(
+            {
+                "username": "user2",
+                "first_name": "will",
+                "last_name": "smith",
+                "email": "test@sample.verify",
+                "password_login": True,
+                "photo": None,
+                "friends": [
+                    {
+                        "friend": "user1",
+                        "name": "poppin pippin",
+                        "sent": 3,
+                        "received": 0,
+                        "last_message_id_sent": None,
+                        "last_message_status": None,
+                        "photo": None,
+                    },
+                ],
+                "pending_friends": [
+                    
+                ],
+            },
+            response.data["data"],
+        )
+
+        Friend.objects.filter(owner=self.user2, friend=user5).update(
+            deleted=False, blocked=False
+        )
+
+        # user1 <-> user2, user2 <-! user4, user2 <-> user5
         user6 = get_user_model().objects.create_user(username='user6',
                                                      password='my_password5',
                                                      first_name='smell',
@@ -663,175 +821,280 @@ class APIV2TestSuite(TestCase):
         f_user4.sent = 7
         f_user4.save()
 
-        response = c.get('/v2/get_info/', HTTP_AUTHORIZATION=f'Token {self.token2}')
+        # user1 <-> user2, user2 <-! user4, user2 <-> user5, user2 <-> user6
+        # check that results are sorted in the correct order
+        response = c.get("/v2/get_info/", HTTP_AUTHORIZATION=f"Token {self.token2}")
         self.assertContains(response, '', status_code=200)
-        self.assertEqual({
-            'username': 'user2',
-            'first_name': 'will',
-            'last_name': 'smith',
-            'email': 'test@sample.verify',
-            'password_login': True,
-            'photo': None,
-            'friends': [
-                {
-                    'friend': 'user5',
-                    'name': 'smill pill',
-                    'sent': 5,
-                    'received': 0,
-                    'last_message_id_sent': None,
-                    'last_message_status': None,
-                    'photo': None
-                },
-                {
-                    'friend': 'user1',
-                    'name': 'poppin pippin',
-                    'sent': 3,
-                    'received': 0,
-                    'last_message_id_sent': None,
-                    'last_message_status': None,
-                    'photo': None
-                },
-                {
-                    'friend': 'user6',
-                    'name': 'smell pell',
-                    'sent': 2,
-                    'received': 0,
-                    'last_message_id_sent': None,
-                    'last_message_status': None,
-                    'photo': None
-                }
-            ]
-        }, response.data['data'])
+        self.assertEqual(
+            {
+                "username": "user2",
+                "first_name": "will",
+                "last_name": "smith",
+                "email": "test@sample.verify",
+                "password_login": True,
+                "photo": None,
+                "friends": [
+                    {
+                        "friend": "user5",
+                        "name": "smill pill",
+                        "sent": 5,
+                        "received": 0,
+                        "last_message_id_sent": None,
+                        "last_message_status": None,
+                        "photo": None,
+                    },
+                    {
+                        "friend": "user1",
+                        "name": "poppin pippin",
+                        "sent": 3,
+                        "received": 0,
+                        "last_message_id_sent": None,
+                        "last_message_status": None,
+                        "photo": None,
+                    },
+                    {
+                        "friend": "user6",
+                        "name": "smell pell",
+                        "sent": 2,
+                        "received": 0,
+                        "last_message_id_sent": None,
+                        "last_message_status": None,
+                        "photo": None,
+                    },
+                ],
+                "pending_friends": [],
+            },
+            response.data["data"],
+        )
 
         f6.name = 'smelly feet'
         f6.save()
 
+        # check that custom names show up correctly
         response = c.get('/v2/get_info/', HTTP_AUTHORIZATION=f'Token {self.token2}')
         self.assertContains(response, '', status_code=200)
-        self.assertEqual({
-            'username': 'user2',
-            'first_name': 'will',
-            'last_name': 'smith',
-            'email': 'test@sample.verify',
-            'password_login': True,
-            'photo': None,
-            'friends': [
-                {
-                    'friend': 'user5',
-                    'name': 'smill pill',
-                    'sent': 5,
-                    'received': 0,
-                    'last_message_id_sent': None,
-                    'last_message_status': None,
-                    'photo': None
-                },
-                {
-                    'friend': 'user1',
-                    'name': 'poppin pippin',
-                    'sent': 3,
-                    'received': 0,
-                    'last_message_id_sent': None,
-                    'last_message_status': None,
-                    'photo': None
-                },
-                {
-                    'friend': 'user6',
-                    'name': 'smelly feet',
-                    'sent': 2,
-                    'received': 0,
-                    'last_message_id_sent': None,
-                    'last_message_status': None,
-                    'photo': None
-                }
-            ]
-        }, response.data['data'])
+        self.assertEqual(
+            {
+                "username": "user2",
+                "first_name": "will",
+                "last_name": "smith",
+                "email": "test@sample.verify",
+                "password_login": True,
+                "photo": None,
+                "friends": [
+                    {
+                        "friend": "user5",
+                        "name": "smill pill",
+                        "sent": 5,
+                        "received": 0,
+                        "last_message_id_sent": None,
+                        "last_message_status": None,
+                        "photo": None,
+                    },
+                    {
+                        "friend": "user1",
+                        "name": "poppin pippin",
+                        "sent": 3,
+                        "received": 0,
+                        "last_message_id_sent": None,
+                        "last_message_status": None,
+                        "photo": None,
+                    },
+                    {
+                        "friend": "user6",
+                        "name": "smelly feet",
+                        "sent": 2,
+                        "received": 0,
+                        "last_message_id_sent": None,
+                        "last_message_status": None,
+                        "photo": None,
+                    },
+                ],
+                "pending_friends": [],
+            },
+            response.data["data"],
+        )
 
         f6.name = None
         f6.save()
 
         Photo.objects.create(user=user5, photo='test')
 
+        # check that friends' photos show up correctly
         response = c.get('/v2/get_info/', HTTP_AUTHORIZATION=f'Token {self.token2}')
         self.assertContains(response, '', status_code=200)
-        self.assertEqual({
-            'username': 'user2',
-            'first_name': 'will',
-            'last_name': 'smith',
-            'email': 'test@sample.verify',
-            'password_login': True,
-            'photo': None,
-            'friends': [
-                {
-                    'friend': 'user5',
-                    'name': 'smill pill',
-                    'sent': 5,
-                    'received': 0,
-                    'last_message_id_sent': None,
-                    'last_message_status': None,
-                    'photo': 'test'
-                },
-                {
-                    'friend': 'user1',
-                    'name': 'poppin pippin',
-                    'sent': 3,
-                    'received': 0,
-                    'last_message_id_sent': None,
-                    'last_message_status': None,
-                    'photo': None
-                },
-                {
-                    'friend': 'user6',
-                    'name': 'smell pell',
-                    'sent': 2,
-                    'received': 0,
-                    'last_message_id_sent': None,
-                    'last_message_status': None,
-                    'photo': None
-                }
-            ]
-        }, response.data['data'])
+        self.assertEqual(
+            {
+                "username": "user2",
+                "first_name": "will",
+                "last_name": "smith",
+                "email": "test@sample.verify",
+                "password_login": True,
+                "photo": None,
+                "friends": [
+                    {
+                        "friend": "user5",
+                        "name": "smill pill",
+                        "sent": 5,
+                        "received": 0,
+                        "last_message_id_sent": None,
+                        "last_message_status": None,
+                        "photo": "test",
+                    },
+                    {
+                        "friend": "user1",
+                        "name": "poppin pippin",
+                        "sent": 3,
+                        "received": 0,
+                        "last_message_id_sent": None,
+                        "last_message_status": None,
+                        "photo": None,
+                    },
+                    {
+                        "friend": "user6",
+                        "name": "smell pell",
+                        "sent": 2,
+                        "received": 0,
+                        "last_message_id_sent": None,
+                        "last_message_status": None,
+                        "photo": None,
+                    },
+                ],
+                "pending_friends": [],
+            },
+            response.data["data"],
+        )
 
-        Photo.objects.create(user=self.user2, photo='test2')
+        Friend.objects.filter(owner=self.user2, friend=user5).update(deleted=True)
 
-        response = c.get('/v2/get_info/', HTTP_AUTHORIZATION=f'Token {self.token2}')
+        # user1 <- user2, user2 <-! user4, user2 <-x user5, user2 <-> user6
+        # check that pending friends' photos show up correctly
+        response = c.get("/v2/get_info/", HTTP_AUTHORIZATION=f"Token {self.token2}")
+        self.assertContains(response, "", status_code=200)
+        self.assertEqual(
+            {
+                "username": "user2",
+                "first_name": "will",
+                "last_name": "smith",
+                "email": "test@sample.verify",
+                "password_login": True,
+                "photo": None,
+                "friends": [
+                    {
+                        "friend": "user1",
+                        "name": "poppin pippin",
+                        "sent": 3,
+                        "received": 0,
+                        "last_message_id_sent": None,
+                        "last_message_status": None,
+                        "photo": None,
+                    },
+                    {
+                        "friend": "user6",
+                        "name": "smell pell",
+                        "sent": 2,
+                        "received": 0,
+                        "last_message_id_sent": None,
+                        "last_message_status": None,
+                        "photo": None,
+                    },
+                ],
+                "pending_friends": [
+                    {"username": "user5", "name": "smill pill", "photo": 'test'}
+                ],
+            },
+            response.data["data"],
+        )
+
+        Friend.objects.filter(owner=self.user2, friend=user5).update(deleted=False)
+        Photo.objects.create(user=self.user2, photo="test2")
+
+        # user1 <- user2, user2 <-! user4, user2 <-> user5, user2 <-> user6
+        # check that the user's photo shows up correctly
+        response = c.get("/v2/get_info/", HTTP_AUTHORIZATION=f"Token {self.token2}")
         self.assertContains(response, '', status_code=200)
-        self.assertEqual({
-            'username': 'user2',
-            'first_name': 'will',
-            'last_name': 'smith',
-            'email': 'test@sample.verify',
-            'password_login': True,
-            'photo': 'test2',
-            'friends': [
-                {
-                    'friend': 'user5',
-                    'name': 'smill pill',
-                    'sent': 5,
-                    'received': 0,
-                    'last_message_id_sent': None,
-                    'last_message_status': None,
-                    'photo': 'test'
-                },
-                {
-                    'friend': 'user1',
-                    'name': 'poppin pippin',
-                    'sent': 3,
-                    'received': 0,
-                    'last_message_id_sent': None,
-                    'last_message_status': None,
-                    'photo': None
-                },
-                {
-                    'friend': 'user6',
-                    'name': 'smell pell',
-                    'sent': 2,
-                    'received': 0,
-                    'last_message_id_sent': None,
-                    'last_message_status': None,
-                    'photo': None
-                }
-            ]
-        }, response.data['data'])
+        self.assertEqual(
+            {
+                "username": "user2",
+                "first_name": "will",
+                "last_name": "smith",
+                "email": "test@sample.verify",
+                "password_login": True,
+                "photo": "test2",
+                "friends": [
+                    {
+                        "friend": "user5",
+                        "name": "smill pill",
+                        "sent": 5,
+                        "received": 0,
+                        "last_message_id_sent": None,
+                        "last_message_status": None,
+                        "photo": "test",
+                    },
+                    {
+                        "friend": "user1",
+                        "name": "poppin pippin",
+                        "sent": 3,
+                        "received": 0,
+                        "last_message_id_sent": None,
+                        "last_message_status": None,
+                        "photo": None,
+                    },
+                    {
+                        "friend": "user6",
+                        "name": "smell pell",
+                        "sent": 2,
+                        "received": 0,
+                        "last_message_id_sent": None,
+                        "last_message_status": None,
+                        "photo": None,
+                    },
+                ],
+                "pending_friends": [],
+            },
+            response.data["data"],
+        )
+
+        Friend.objects.filter(owner=self.user1, friend=self.user2).update(deleted=True)
+        Friend.objects.create(owner=self.user1, friend=user5)
+        Friend.objects.create(owner=user5, friend=self.user1)
+        # user1 <- user2, user2 <-! user4, user2 <-> user5, user2 <-> user6, user1 <-> user5
+
+        # check that irrelevant friendships (user1 and user5) don't impact the results
+        response = c.get("/v2/get_info/", HTTP_AUTHORIZATION=f"Token {self.token2}")
+        self.assertContains(response, "", status_code=200)
+        self.assertEqual(
+            {
+                "username": "user2",
+                "first_name": "will",
+                "last_name": "smith",
+                "email": "test@sample.verify",
+                "password_login": True,
+                "photo": "test2",
+                "friends": [
+                    {
+                        "friend": "user5",
+                        "name": "smill pill",
+                        "sent": 5,
+                        "received": 0,
+                        "last_message_id_sent": None,
+                        "last_message_status": None,
+                        "photo": "test",
+                    },
+                    {
+                        "friend": "user6",
+                        "name": "smell pell",
+                        "sent": 2,
+                        "received": 0,
+                        "last_message_id_sent": None,
+                        "last_message_status": None,
+                        "photo": None,
+                    },
+                ],
+                "pending_friends": []
+            },
+            response.data["data"],
+        )
 
     def test_edit_friend_name(self):
         # editing the friend name for a friend that doesn't exist creates a friend that is deleted
@@ -913,6 +1176,24 @@ class APIV2TestSuite(TestCase):
         response = c.post('/v2/send_alert/', {'to': 'user1', 'message': 'hi'},
                           HTTP_AUTHORIZATION=f'Token {self.token2}')
         self.assertContains(response, '', status_code=403)
+
+        # Test that you can't receive messages from someone you blocked
+        Friend.objects.filter(owner=self.user1, friend=self.user2).update(blocked=True)
+        response = c.post(
+            "/v2/send_alert/",
+            {"to": "user1", "message": "hi"},
+            HTTP_AUTHORIZATION=f"Token {self.token2}",
+        )
+        self.assertContains(response, "", status_code=403)
+
+        # Test that you can't receive messages from someone you blocked (even if deleted is False)
+        Friend.objects.filter(owner=self.user1, friend=self.user2).update(deleted=False)
+        response = c.post(
+            "/v2/send_alert/",
+            {"to": "user1", "message": "hi"},
+            HTTP_AUTHORIZATION=f"Token {self.token2}",
+        )
+        self.assertContains(response, "", status_code=403)
 
     def test_check_params_simple(self):
         """
