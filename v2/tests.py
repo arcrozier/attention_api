@@ -16,7 +16,7 @@ from v2.utils import check_params
 
 # Create your tests here.
 
-auth_required_post_endpoints = ['send_alert', 'register_device', 'add_friend', 'alert_read', 'alert_delivered', 'block_user']
+auth_required_post_endpoints = ['send_alert', 'register_device', 'add_friend', 'alert_read', 'alert_delivered', 'block_user', 'ignore_user']
 auth_required_get_endpoints = ['get_name', 'get_info']
 auth_required_delete_endpoints = ['delete_friend/friend', 'delete_user_data']
 auth_required_put_endpoints = ['edit', 'edit_friend_name']
@@ -371,12 +371,94 @@ class APIV2TestSuite(TestCase):
         self.assertTrue(Friend.objects.get(owner=self.user1, friend=self.user2).deleted)
         self.assertTrue(Friend.objects.get(owner=self.user2, friend=self.user1).deleted)
 
+    def test_ignore_user(self):
+        c = Client()
+
+        # user1 can ignore user2
+        response = c.post('/v2/ignore_user/', {"username": "user2"}, HTTP_AUTHORIZATION=f"Token {self.token1}")
+        self.assertContains(response, '', status_code=200)
+        self.assertTrue(Friend.objects.get(owner=self.user2, friend=self.user1).deleted)
+
+        Friend.objects.filter(owner=self.user2, friend=self.user1).update(deleted=False)
+        Friend.objects.create(owner=self.user1, friend=self.user2)
+
+        # now user1 and user2 are friends with each other, user1 can't ignore user2
+        response = c.post(
+            "/v2/ignore_user/",
+            {"username": "user2"},
+            HTTP_AUTHORIZATION=f"Token {self.token1}",
+        )
+        self.assertContains(response, '', status_code=400)
+        self.assertFalse(
+            Friend.objects.get(owner=self.user2, friend=self.user1).deleted
+        )
+        self.assertFalse(
+            Friend.objects.get(owner=self.user1, friend=self.user2).deleted
+        )
+
+        # now user2 isn't friends with user1, so user1 can't ignore them
+        Friend.objects.filter(owner=self.user2, friend=self.user1).update(deleted=True)
+        Friend.objects.filter(owner=self.user1, friend=self.user2).update(deleted=False)
+
+        response = c.post(
+            "/v2/ignore_user/",
+            {"username": "user2"},
+            HTTP_AUTHORIZATION=f"Token {self.token1}",
+        )
+        self.assertContains(response, "", status_code=400)
+        self.assertTrue(
+            Friend.objects.get(owner=self.user2, friend=self.user1).deleted
+        )
+        self.assertFalse(
+            Friend.objects.get(owner=self.user1, friend=self.user2).deleted
+        )
+
+        # now neither is friends with the other
+        Friend.objects.filter(owner=self.user2, friend=self.user1).update(deleted=True)
+        Friend.objects.filter(owner=self.user1, friend=self.user2).update(deleted=True)
+
+        response = c.post(
+            "/v2/ignore_user/",
+            {"username": "user2"},
+            HTTP_AUTHORIZATION=f"Token {self.token1}",
+        )
+        self.assertContains(response, "", status_code=400)
+        self.assertTrue(Friend.objects.get(owner=self.user2, friend=self.user1).deleted)
+        self.assertTrue(
+            Friend.objects.get(owner=self.user1, friend=self.user2).deleted
+        )
+
+        # user2 has blocked user1, so user1 can't tell if user2 exists
+        Friend.objects.filter(owner=self.user2, friend=self.user1).update(blocked=True, deleted=False)
+        Friend.objects.filter(owner=self.user1, friend=self.user2).update(deleted=True)
+
+        response = c.post(
+            "/v2/ignore_user/",
+            {"username": "user2"},
+            HTTP_AUTHORIZATION=f"Token {self.token1}",
+        )
+        self.assertContains(response, "", status_code=400)
+        self.assertTrue(Friend.objects.get(owner=self.user2, friend=self.user1).blocked)
+        self.assertFalse(Friend.objects.get(owner=self.user2, friend=self.user1).deleted)
+        self.assertTrue(Friend.objects.get(owner=self.user1, friend=self.user2).deleted)
+
     def test_delete_friend(self):
         c = Client()
         user4 = get_user_model().objects.create_user(username='user4', password='my_password4', first_name='will', last_name='smith')
         response = c.delete('/v2/delete_friend/user1/', HTTP_AUTHORIZATION=f'Token {self.token2}',
                             content_type='application/json')
         self.assertContains(response, '', status_code=200)
+
+        Friend.objects.filter(owner=self.user2, friend=self.user1).update(deleted=False)
+        Friend.objects.update_or_create(owner=self.user1, friend=self.user2, defaults={'deleted': False})
+
+        response = c.delete('/v2/delete_friend/user1/', HTTP_AUTHORIZATION=f'Token {self.token2}',
+                            content_type='application/json')
+        self.assertContains(response, '', status_code=200)
+
+        self.assertTrue(Friend.objects.get(owner=self.user2, friend=self.user1).deleted)
+        self.assertTrue(Friend.objects.get(owner=self.user1, friend=self.user2).deleted)
+
         friend = Friend.objects.get(owner__username='user2', friend__username='user1', sent=3, received=0, deleted=True)
 
         # User 4 is not friends with us (or vice versa)

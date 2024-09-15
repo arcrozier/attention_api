@@ -400,6 +400,20 @@ def block_user(request: Request) -> Response:
         return Response(build_response("Couldn't find user"), status=400)
 
 
+@api_view(["POST"])
+@require_params("username")
+def ignore_user(request: Request) -> Response:
+    try:
+        with transaction.atomic():
+            ignored = get_user_model().objects.get(username=request.data['username'])
+            if Friend.objects.filter(owner=request.user, friend=ignored, blocked=False, deleted=False).exists():
+                return Response(build_response("You cannot ignore someone you are already friends with"), status=400)
+            if Friend.objects.filter(owner=ignored, friend=request.user, blocked=False, deleted=False).update(deleted=True) != 1:
+                raise get_user_model().DoesNotExist
+            return Response(build_response("User ignored"), status=200)
+    except get_user_model().DoesNotExist:
+        return Response(build_response("No matching friend found"), status=400)
+
 @api_view(["DELETE"])
 def delete_friend(request: Request, username) -> Response:
     """
