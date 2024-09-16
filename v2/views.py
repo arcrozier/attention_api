@@ -247,7 +247,7 @@ def add_friend(request: Request) -> Response:
     """
 
     try:
-        friend = get_user_model().objects.get(username=request.data["username"])
+        friend = get_user_model().objects.select_related("photo").get(username=request.data["username"])
         blocked = Friend.objects.filter(
             owner=friend, friend=request.user, blocked=True
         ).exists()
@@ -268,12 +268,15 @@ def add_friend(request: Request) -> Response:
     tokens: QuerySet = FCMTokens.objects.filter(user=friend)
 
     if bool(tokens):
+        data = {
+            "action": "friended",
+            "friend": friend.username,
+            "name": f"{friend.first_name} {friend.last_name}",
+            "photo": friend.photo.photo if hasattr(friend, "photo") else "",
+        }
         for token in tokens:
             message = messaging.Message(
-                data={
-                    "action": "friended",
-                    "friend": friend.username,
-                },
+                data=data,
                 android=messaging.AndroidConfig(priority="normal"),
                 token=token.fcm_token,
             )

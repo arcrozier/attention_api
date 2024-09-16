@@ -275,6 +275,8 @@ class APIV2TestSuite(TestCase):
         # i.e. user1 -> user4, but user4 !-> user1
         user4 = get_user_model().objects.create_user(username='user4', password='my_password4', first_name='will',
                                                      last_name='skill')
+
+        Photo.objects.create(user=user4, photo="test")
         response = c.post('/v2/add_friend/', {'username': 'user4'}, HTTP_AUTHORIZATION=f'Token {self.token1}')
         self.assertContains(response, '', status_code=200)
         friend: Friend = Friend.objects.get(owner__username='user1', friend__username='user4')
