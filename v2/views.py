@@ -247,7 +247,11 @@ def add_friend(request: Request) -> Response:
     """
 
     try:
-        friend = get_user_model().objects.select_related("photo").get(username=request.data["username"])
+        friend = (
+            get_user_model()
+            .objects.select_related("photo")
+            .get(username=request.data["username"])
+        )
         blocked = Friend.objects.filter(
             owner=friend, friend=request.user, blocked=True
         ).exists()
@@ -398,7 +402,11 @@ def block_user(request: Request) -> Response:
         ).exists()
         if blocked:
             raise get_user_model().DoesNotExist
-        Friend.objects.update_or_create(owner=request.user, friend=blockee, defaults={'blocked': True, 'deleted': True})
+        Friend.objects.update_or_create(
+            owner=request.user,
+            friend=blockee,
+            defaults={"blocked": True, "deleted": True},
+        )
         Friend.objects.filter(owner=blockee, friend=request.user).update(deleted=True)
         return Response(build_response("Blocked user"), status=200)
     except get_user_model().DoesNotExist:
@@ -410,14 +418,27 @@ def block_user(request: Request) -> Response:
 def ignore_user(request: Request) -> Response:
     try:
         with transaction.atomic():
-            ignored = get_user_model().objects.get(username=request.data['username'])
-            if Friend.objects.filter(owner=request.user, friend=ignored, blocked=False, deleted=False).exists():
-                return Response(build_response("You cannot ignore someone you are already friends with"), status=400)
-            if Friend.objects.filter(owner=ignored, friend=request.user, blocked=False, deleted=False).update(deleted=True) != 1:
+            ignored = get_user_model().objects.get(username=request.data["username"])
+            if Friend.objects.filter(
+                owner=request.user, friend=ignored, blocked=False, deleted=False
+            ).exists():
+                return Response(
+                    build_response(
+                        "You cannot ignore someone you are already friends with"
+                    ),
+                    status=400,
+                )
+            if (
+                Friend.objects.filter(
+                    owner=ignored, friend=request.user, blocked=False, deleted=False
+                ).update(deleted=True)
+                != 1
+            ):
                 raise get_user_model().DoesNotExist
             return Response(build_response("User ignored"), status=200)
     except get_user_model().DoesNotExist:
         return Response(build_response("No matching friend found"), status=400)
+
 
 @api_view(["DELETE"])
 def delete_friend(request: Request, username) -> Response:
@@ -766,10 +787,14 @@ def get_user_info(request: Request) -> Response:
             )
         )
         .prefetch_related("photo")
-        .intersection(get_user_model().objects.filter(~Q(
-                friend_of_set__owner=user,
-                friend_of_set__blocked=True,
-            )))
+        .intersection(
+            get_user_model().objects.filter(
+                ~Q(
+                    friend_of_set__owner=user,
+                    friend_of_set__blocked=True,
+                )
+            )
+        )
         .difference(friends_query)
     ]
 
