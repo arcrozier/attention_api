@@ -284,9 +284,11 @@ def add_friend(request: Request) -> Response:
             try:
                 messaging.send(message)
             except InvalidArgumentError as e:
-                logger.warning(f"An alert failed to send: {e.cause}")
+                logger.error(f"An alert failed to send: {e.cause}")
             except UnregisteredError:
                 token.delete()
+            except Exception as e:
+                logger.exception("Exception while sending friend request alert")
 
     return Response(build_response("Successfully added/restored friend"), status=200)
 
@@ -711,7 +713,7 @@ def get_user_info(request: Request) -> Response:
         photo: <user's profile photo, base64 encoded, RGBA-8888, or null if not set>,
         friends: [
             {
-                friend: <friend's username>,
+                username: <friend's username>,
                 name: <friend's name or null>,
                 sent: <number of messages sent to friend>,
                 received: <number of messages received from friend>,

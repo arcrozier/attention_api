@@ -33,7 +33,7 @@ def string_response(args: dict):
 
 def flatten_friend(friend: User):
     return {
-        'friend': friend.friend.username,
+        'username': friend.friend.username,
         'name': friend.name or f'{friend.friend.first_name} {friend.friend.last_name}',
         'photo': friend.friend.photo.photo if hasattr(friend.friend, 'photo') else None,
         'sent': friend.sent,
