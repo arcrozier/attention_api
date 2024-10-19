@@ -12,9 +12,14 @@ from dotenv import load_dotenv
 
 from django.core.asgi import get_asgi_application
 
-load_dotenv()
-load_dotenv(os.environ['DB_CREDENTIALS_FILE'])
+import logging
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'attention_api.settings')
+load_dotenv()
+load_dotenv(os.environ["DB_CREDENTIALS_FILE"])
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "attention_api.settings")
+
+logger = logging.getLogger(__name__)
+logger.info(f"Settings module: {os.environ['DJANGO_SETTINGS_MODULE']}")
 
 application = get_asgi_application()
