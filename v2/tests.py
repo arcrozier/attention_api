@@ -731,7 +731,7 @@ class APIV2TestSuite(TestCase):
                 "photo": None,
                 "friends": [
                     {
-                        "friend": "user1",
+                        "username": "user1",
                         "name": "poppin pippin",
                         "sent": 3,
                         "received": 0,
@@ -798,7 +798,7 @@ class APIV2TestSuite(TestCase):
                 "photo": None,
                 "friends": [
                     {
-                        "friend": "user1",
+                        "username": "user1",
                         "name": "poppin pippin",
                         "sent": 3,
                         "received": 0,
@@ -832,7 +832,7 @@ class APIV2TestSuite(TestCase):
                 "photo": None,
                 "friends": [
                     {
-                        "friend": "user1",
+                        "username": "user1",
                         "name": "poppin pippin",
                         "sent": 3,
                         "received": 0,
@@ -868,7 +868,7 @@ class APIV2TestSuite(TestCase):
                 "photo": None,
                 "friends": [
                     {
-                        "friend": "user1",
+                        "username": "user1",
                         "name": "poppin pippin",
                         "sent": 3,
                         "received": 0,
@@ -902,7 +902,7 @@ class APIV2TestSuite(TestCase):
                 "photo": None,
                 "friends": [
                     {
-                        "friend": "user1",
+                        "username": "user1",
                         "name": "poppin pippin",
                         "sent": 3,
                         "received": 0,
@@ -946,7 +946,7 @@ class APIV2TestSuite(TestCase):
                 "photo": None,
                 "friends": [
                     {
-                        "friend": "user5",
+                        "username": "user5",
                         "name": "smill pill",
                         "sent": 5,
                         "received": 0,
@@ -955,7 +955,7 @@ class APIV2TestSuite(TestCase):
                         "photo": None,
                     },
                     {
-                        "friend": "user1",
+                        "username": "user1",
                         "name": "poppin pippin",
                         "sent": 3,
                         "received": 0,
@@ -964,7 +964,7 @@ class APIV2TestSuite(TestCase):
                         "photo": None,
                     },
                     {
-                        "friend": "user6",
+                        "username": "user6",
                         "name": "smell pell",
                         "sent": 2,
                         "received": 0,
@@ -994,7 +994,7 @@ class APIV2TestSuite(TestCase):
                 "photo": None,
                 "friends": [
                     {
-                        "friend": "user5",
+                        "username": "user5",
                         "name": "smill pill",
                         "sent": 5,
                         "received": 0,
@@ -1003,7 +1003,7 @@ class APIV2TestSuite(TestCase):
                         "photo": None,
                     },
                     {
-                        "friend": "user1",
+                        "username": "user1",
                         "name": "poppin pippin",
                         "sent": 3,
                         "received": 0,
@@ -1012,7 +1012,7 @@ class APIV2TestSuite(TestCase):
                         "photo": None,
                     },
                     {
-                        "friend": "user6",
+                        "username": "user6",
                         "name": "smelly feet",
                         "sent": 2,
                         "received": 0,
@@ -1044,7 +1044,7 @@ class APIV2TestSuite(TestCase):
                 "photo": None,
                 "friends": [
                     {
-                        "friend": "user5",
+                        "username": "user5",
                         "name": "smill pill",
                         "sent": 5,
                         "received": 0,
@@ -1053,7 +1053,7 @@ class APIV2TestSuite(TestCase):
                         "photo": "test",
                     },
                     {
-                        "friend": "user1",
+                        "username": "user1",
                         "name": "poppin pippin",
                         "sent": 3,
                         "received": 0,
@@ -1062,7 +1062,7 @@ class APIV2TestSuite(TestCase):
                         "photo": None,
                     },
                     {
-                        "friend": "user6",
+                        "username": "user6",
                         "name": "smell pell",
                         "sent": 2,
                         "received": 0,
@@ -1092,7 +1092,7 @@ class APIV2TestSuite(TestCase):
                 "photo": None,
                 "friends": [
                     {
-                        "friend": "user1",
+                        "username": "user1",
                         "name": "poppin pippin",
                         "sent": 3,
                         "received": 0,
@@ -1101,7 +1101,7 @@ class APIV2TestSuite(TestCase):
                         "photo": None,
                     },
                     {
-                        "friend": "user6",
+                        "username": "user6",
                         "name": "smell pell",
                         "sent": 2,
                         "received": 0,
@@ -1134,7 +1134,7 @@ class APIV2TestSuite(TestCase):
                 "photo": "test2",
                 "friends": [
                     {
-                        "friend": "user5",
+                        "username": "user5",
                         "name": "smill pill",
                         "sent": 5,
                         "received": 0,
@@ -1143,7 +1143,7 @@ class APIV2TestSuite(TestCase):
                         "photo": "test",
                     },
                     {
-                        "friend": "user1",
+                        "username": "user1",
                         "name": "poppin pippin",
                         "sent": 3,
                         "received": 0,
@@ -1152,7 +1152,7 @@ class APIV2TestSuite(TestCase):
                         "photo": None,
                     },
                     {
-                        "friend": "user6",
+                        "username": "user6",
                         "name": "smell pell",
                         "sent": 2,
                         "received": 0,
@@ -1184,7 +1184,7 @@ class APIV2TestSuite(TestCase):
                 "photo": "test2",
                 "friends": [
                     {
-                        "friend": "user5",
+                        "username": "user5",
                         "name": "smill pill",
                         "sent": 5,
                         "received": 0,
@@ -1193,7 +1193,7 @@ class APIV2TestSuite(TestCase):
                         "photo": "test",
                     },
                     {
-                        "friend": "user6",
+                        "username": "user6",
                         "name": "smell pell",
                         "sent": 2,
                         "received": 0,
