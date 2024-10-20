@@ -875,21 +875,20 @@ def send_alert(request: Request) -> Response:
             build_response(f"Could not find devices belonging to user {to}"), status=400
         )
 
+    data = {
+        "action": "alert",
+        "alert_id": alert_id,
+        "alert_to": request.data["to"],
+        "alert_from": request.user.username,
+        "alert_timestamp": str(timestamp),
+    }
+    if "message" in request.data:
+        data["alert_message"] = str(request.data["message"])
+
     at_least_one_success: bool = False
     for token in tokens:
         message = messaging.Message(
-            data={
-                "action": "alert",
-                "alert_id": alert_id,
-                "alert_to": request.data["to"],
-                "alert_from": request.user.username,
-                "alert_message": (
-                    str(request.data["message"])
-                    if "message" in request.data
-                    else "None"
-                ),
-                "alert_timestamp": str(timestamp),
-            },
+            data=data,
             android=messaging.AndroidConfig(priority="high"),
             token=token.fcm_token,
         )
