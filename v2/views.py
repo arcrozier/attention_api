@@ -247,7 +247,11 @@ def add_friend(request: Request) -> Response:
     """
 
     try:
-        friend = get_user_model().objects.select_related("photo").get(username=request.data["username"])
+        friend = (
+            get_user_model()
+            .objects.select_related("photo")
+            .get(username=request.data["username"])
+        )
         blocked = Friend.objects.filter(
             owner=friend, friend=request.user, blocked=True
         ).exists()
@@ -284,9 +288,11 @@ def add_friend(request: Request) -> Response:
             try:
                 messaging.send(message)
             except InvalidArgumentError as e:
-                logger.warning(f"An alert failed to send: {e.cause}")
+                logger.error(f"An alert failed to send: {e.cause}")
             except UnregisteredError:
                 token.delete()
+            except Exception as e:
+                logger.exception("Exception while sending friend request alert")
 
     return Response(build_response("Successfully added/restored friend"), status=200)
 
@@ -396,7 +402,11 @@ def block_user(request: Request) -> Response:
         ).exists()
         if blocked:
             raise get_user_model().DoesNotExist
-        Friend.objects.update_or_create(owner=request.user, friend=blockee, defaults={'blocked': True, 'deleted': True})
+        Friend.objects.update_or_create(
+            owner=request.user,
+            friend=blockee,
+            defaults={"blocked": True, "deleted": True},
+        )
         Friend.objects.filter(owner=blockee, friend=request.user).update(deleted=True)
         return Response(build_response("Blocked user"), status=200)
     except get_user_model().DoesNotExist:
@@ -408,14 +418,27 @@ def block_user(request: Request) -> Response:
 def ignore_user(request: Request) -> Response:
     try:
         with transaction.atomic():
-            ignored = get_user_model().objects.get(username=request.data['username'])
-            if Friend.objects.filter(owner=request.user, friend=ignored, blocked=False, deleted=False).exists():
-                return Response(build_response("You cannot ignore someone you are already friends with"), status=400)
-            if Friend.objects.filter(owner=ignored, friend=request.user, blocked=False, deleted=False).update(deleted=True) != 1:
+            ignored = get_user_model().objects.get(username=request.data["username"])
+            if Friend.objects.filter(
+                owner=request.user, friend=ignored, blocked=False, deleted=False
+            ).exists():
+                return Response(
+                    build_response(
+                        "You cannot ignore someone you are already friends with"
+                    ),
+                    status=400,
+                )
+            if (
+                Friend.objects.filter(
+                    owner=ignored, friend=request.user, blocked=False, deleted=False
+                ).update(deleted=True)
+                != 1
+            ):
                 raise get_user_model().DoesNotExist
             return Response(build_response("User ignored"), status=200)
     except get_user_model().DoesNotExist:
         return Response(build_response("No matching friend found"), status=400)
+
 
 @api_view(["DELETE"])
 def delete_friend(request: Request, username) -> Response:
@@ -711,7 +734,7 @@ def get_user_info(request: Request) -> Response:
         photo: <user's profile photo, base64 encoded, RGBA-8888, or null if not set>,
         friends: [
             {
-                friend: <friend's username>,
+                username: <friend's username>,
                 name: <friend's name or null>,
                 sent: <number of messages sent to friend>,
                 received: <number of messages received from friend>,
@@ -764,10 +787,14 @@ def get_user_info(request: Request) -> Response:
             )
         )
         .prefetch_related("photo")
-        .intersection(get_user_model().objects.filter(~Q(
-                friend_of_set__owner=user,
-                friend_of_set__blocked=True,
-            )))
+        .intersection(
+            get_user_model().objects.filter(
+                ~Q(
+                    friend_of_set__owner=user,
+                    friend_of_set__blocked=True,
+                )
+            )
+        )
         .difference(friends_query)
     ]
 
@@ -848,21 +875,20 @@ def send_alert(request: Request) -> Response:
             build_response(f"Could not find devices belonging to user {to}"), status=400
         )
 
+    data = {
+        "action": "alert",
+        "alert_id": alert_id,
+        "alert_to": request.data["to"],
+        "alert_from": request.user.username,
+        "alert_timestamp": str(timestamp),
+    }
+    if "message" in request.data:
+        data["alert_message"] = str(request.data["message"])
+
     at_least_one_success: bool = False
     for token in tokens:
         message = messaging.Message(
-            data={
-                "action": "alert",
-                "alert_id": alert_id,
-                "alert_to": request.data["to"],
-                "alert_from": request.user.username,
-                "alert_message": (
-                    str(request.data["message"])
-                    if "message" in request.data
-                    else "None"
-                ),
-                "alert_timestamp": str(timestamp),
-            },
+            data=data,
             android=messaging.AndroidConfig(priority="high"),
             token=token.fcm_token,
         )
