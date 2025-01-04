@@ -5,7 +5,7 @@ import sys
 from dotenv import load_dotenv
 
 load_dotenv()
-load_dotenv('/var/local/db_credentials/attention_api.env')
+load_dotenv('/var/local/credentials/attention_api.env')
 
 
 def main():
