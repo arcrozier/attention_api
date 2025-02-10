@@ -16,6 +16,8 @@ import logging
 
 load_dotenv()
 load_dotenv(os.environ["DB_CREDENTIALS_FILE"])
+if (os.environ.get("SERVICE_ACCOUNT_FILE")):
+    load_dotenv(os.environ["SERVICE_ACCOUNT_FILE"])
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "attention_api.settings")
 

@@ -44,4 +44,5 @@ urlpatterns = [
     path("set_csrf/", views.set_csrf_token, name="Set-CSRF"),
     path("login/", views.login_session, name="Login"),
     path("test_auth/", views.test_auth),
+    path("report/", views.report),
 ]
