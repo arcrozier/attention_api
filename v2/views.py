@@ -1,6 +1,8 @@
 import base64
 import io
+import json
 import logging
+import os
 import time
 
 from PIL import Image, ImageOps
@@ -25,6 +27,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
+import requests as http_request
 
 from v2.decorators import require_params, require_query_params
 from v2.models import FCMTokens, Friend, Photo
@@ -1059,3 +1062,40 @@ def login_session(request):
         login(request, user)
         return Response(build_response("success"), status=200)
     return Response(build_response("Invalid credentials"), status=403)
+
+
+@api_view(["POST"])
+@require_params("message", "tags", "title")
+def report(request):
+    data = request.data
+    message = data["message"]
+    title = data["title"]
+    tags = data["tags"].split(';')
+    service_account = os.environ.get("ACCOUNT_NAME")
+    service_account_password = os.environ.get("PASSWORD")
+
+    if not service_account or not service_account_password:
+        return Response(build_response("Service account credentials are not available"), status=503)
+    response = http_request.post(f'{settings.ISSUES_URL}/api/create/', auth=(service_account, service_account_password), json={
+        'product': 'attention',
+        'assignee': None,
+        'severity': '2',
+        'title': f'[USER REPORT] {title}',
+        'body': f'Reported by: {request.user.username} (id: {request.user.id}, email: {request.user.email})\n\n{message}',
+        'tags': tags
+    })
+
+    if not response.ok:
+        return Response(build_response("Error creating issue"), response.status_code if response.status_code != 403 else 500)
+    created_issue = response.json()['id']
+
+    files = dict(request.FILES.lists())['photo']
+    attachment_response = http_request.post(f'{settings.ISSUES_URL}/api/attach/', auth=(service_account, service_account_password), data={
+        'id': created_issue
+    }, files=[('attachments', (file.name, file, file.content_type)) for file in files])
+
+    if not attachment_response.ok:
+        logger.error(attachment_response.text)
+    
+    return Response(build_response("Created issue"), status=200)
+

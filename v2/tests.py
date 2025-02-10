@@ -24,6 +24,7 @@ auth_required_post_endpoints = [
     "alert_delivered",
     "block_user",
     "ignore_user",
+    "report"
 ]
 auth_required_get_endpoints = ["get_name", "get_info"]
 auth_required_delete_endpoints = ["delete_friend/friend", "delete_user_data"]

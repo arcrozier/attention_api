@@ -19,6 +19,15 @@ os.environ.setdefault(
     "django-insecure-e9q-4fjk_(--+=joxtbs$2d1km39!7!4_u15851pxjc0pu5e(k",
 )
 
+os.environ.setdefault(
+    'ACCOUNT_NAME', 'attention'
+)
+os.environ.setdefault(
+    'PASSWORD', 'password'
+)
+
+ISSUES_URL = 'http://localhost:3000'
+
 from . import production
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.

@@ -22,6 +22,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.environ["ATTENTION_API_KEY"]
 
+ISSUES_URL = 'https://issues.aracroproducts.com'
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
