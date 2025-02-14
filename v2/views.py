@@ -277,8 +277,8 @@ def add_friend(request: Request) -> Response:
     if bool(tokens):
         data = {
             "action": "friended",
-            "friend": friend.username,
-            "name": f"{friend.first_name} {friend.last_name}",
+            "friend": request.user.username,
+            "name": f"{request.user.first_name} {request.user.last_name}",
             "photo": friend.photo.photo if hasattr(friend, "photo") else "",
         }
         for token in tokens:
