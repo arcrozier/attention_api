@@ -276,11 +276,19 @@ def add_friend(request: Request) -> Response:
 
     if bool(tokens):
         data = {
-            "action": "friended",
             "friend": request.user.username,
             "name": f"{request.user.first_name} {request.user.last_name}",
-            "photo": friend.photo.photo if hasattr(friend, "photo") else "",
+            "photo": request.user.photo.photo if hasattr(request.user, "photo") else "",
         }
+
+        if Friend.objects.filter(
+            owner=friend, friend=request.user, deleted=False, blocked=False
+        ).exists():
+            # Requester is adding someone who already has the requester as a friend
+            data["action"] = "accepted"
+        else:
+            data["action"] = "friended"
+
         for token in tokens:
             message = messaging.Message(
                 data=data,
@@ -399,6 +407,8 @@ def get_friend_name(request: Request) -> Response:
 @require_params("username")
 def block_user(request: Request) -> Response:
     try:
+        if request.user.username == request.data["username"]:
+            return Response(build_response("Cannot block yourself"), status=400)
         blockee = get_user_model().objects.get(username=request.data["username"])
         blocked = Friend.objects.filter(
             owner=blockee, friend=request.user, blocked=True
@@ -1070,32 +1080,43 @@ def report(request):
     data = request.data
     message = data["message"]
     title = data["title"]
-    tags = data["tags"].split(';')
+    tags = data["tags"].split(";")
     service_account = os.environ.get("ACCOUNT_NAME")
     service_account_password = os.environ.get("PASSWORD")
 
     if not service_account or not service_account_password:
-        return Response(build_response("Service account credentials are not available"), status=503)
-    response = http_request.post(f'{settings.ISSUES_URL}/api/create/', auth=(service_account, service_account_password), json={
-        'product': 'attention',
-        'assignee': None,
-        'severity': '2',
-        'title': f'[USER REPORT] {title}',
-        'body': f'Reported by: {request.user.username} (id: {request.user.id}, email: {request.user.email})\n\n{message}',
-        'tags': tags
-    })
+        return Response(
+            build_response("Service account credentials are not available"), status=503
+        )
+    response = http_request.post(
+        f"{settings.ISSUES_URL}/api/create/",
+        auth=(service_account, service_account_password),
+        json={
+            "product": "attention",
+            "assignee": None,
+            "severity": "2",
+            "title": f"[USER REPORT] {title}",
+            "body": f"Reported by: {request.user.username} (id: {request.user.id}, email: {request.user.email})\n\n{message}",
+            "tags": tags,
+        },
+    )
 
     if not response.ok:
-        return Response(build_response("Error creating issue"), response.status_code if response.status_code != 403 else 500)
-    created_issue = response.json()['id']
+        return Response(
+            build_response("Error creating issue"),
+            response.status_code if response.status_code != 403 else 500,
+        )
+    created_issue = response.json()["id"]
 
-    files = dict(request.FILES.lists())['photo']
-    attachment_response = http_request.post(f'{settings.ISSUES_URL}/api/attach/', auth=(service_account, service_account_password), data={
-        'id': created_issue
-    }, files=[('attachments', (file.name, file, file.content_type)) for file in files])
+    files = dict(request.FILES.lists())["photo"]
+    attachment_response = http_request.post(
+        f"{settings.ISSUES_URL}/api/attach/",
+        auth=(service_account, service_account_password),
+        data={"id": created_issue},
+        files=[("attachments", (file.name, file, file.content_type)) for file in files],
+    )
 
     if not attachment_response.ok:
         logger.error(attachment_response.text)
-    
-    return Response(build_response("Created issue"), status=200)
 
+    return Response(build_response("Created issue"), status=200)

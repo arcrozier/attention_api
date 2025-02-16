@@ -24,7 +24,7 @@ auth_required_post_endpoints = [
     "alert_delivered",
     "block_user",
     "ignore_user",
-    "report"
+    "report",
 ]
 auth_required_get_endpoints = ["get_name", "get_info"]
 auth_required_delete_endpoints = ["delete_friend/friend", "delete_user_data"]
@@ -661,6 +661,19 @@ class APIV2TestSuite(TestCase):
         self.assertTrue(Friend.objects.get(owner=self.user1, friend=self.user2).blocked)
         self.assertTrue(Friend.objects.get(owner=self.user1, friend=self.user2).deleted)
         self.assertTrue(Friend.objects.get(owner=self.user2, friend=self.user1).deleted)
+
+        # try blocking ourselves
+        response = c.post(
+            "/v2/block_user/",
+            {"username": "user1"},
+            HTTP_AUTHORIZATION=f"Token {self.token1}",
+        )
+        self.assertContains(response, "", status_code=400)
+        self.assertFalse(
+            Friend.objects.filter(
+                owner=self.user1, friend=self.user1, blocked=True
+            ).exists()
+        )
 
     def test_ignore_user(self):
         c = Client()
