@@ -22,7 +22,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.environ["ATTENTION_API_KEY"]
 
-ISSUES_URL = 'https://issues.aracroproducts.com'
+ISSUES_URL = "https://issues.aracroproducts.com"
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
@@ -157,8 +157,8 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/3.2/howto/static-files/
 
-STATIC_URL = 'https://byteme.aracroproducts.com/static/attention/'
-STATIC_ROOT = '/var/www/static/attention/'
+STATIC_URL = "https://byteme.aracroproducts.com/static/attention/"
+STATIC_ROOT = "/var/www/static/attention/"
 
 DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024
 
