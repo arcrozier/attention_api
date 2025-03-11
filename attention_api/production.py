@@ -154,8 +154,8 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/3.2/howto/static-files/
 
-STATIC_URL = '/static/'
-STATIC_ROOT = '/var/www/attention/static'
+STATIC_URL = 'https://byteme.aracroproducts.com/static/attention/'
+STATIC_ROOT = '/var/www/static/attention/'
 
 DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024
 
